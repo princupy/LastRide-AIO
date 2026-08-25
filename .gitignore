@@ -1,0 +1,8 @@
+bin/
+obj/
+.verify-build/
+.env
+.vs/
+.idea/
+*.user
+*.suo
