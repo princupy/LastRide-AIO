@@ -1,7 +1,7 @@
 using Discord;
 using Discord.Commands;
 using LastRide.Builders;
-using LastRide.Configuration;
+using LastRide.Services;
 
 namespace LastRide.Modules;
 
@@ -9,14 +9,14 @@ namespace LastRide.Modules;
 public sealed class HelpModule : ModuleBase<SocketCommandContext>
 {
     private readonly HelpComponentBuilder _builder;
-    private readonly BotOptions _options;
+    private readonly PrefixService _prefixService;
 
     public HelpModule(
         HelpComponentBuilder builder,
-        BotOptions options)
+        PrefixService prefixService)
     {
         _builder = builder;
-        _options = options;
+        _prefixService = prefixService;
     }
 
     [Command("help")]
@@ -26,7 +26,7 @@ public sealed class HelpModule : ModuleBase<SocketCommandContext>
     {
         var components = _builder.Build(
             Context.User.Id,
-            _options.Prefix,
+            _prefixService.GetPrefix(Context.Guild?.Id),
             Context.User.Mention,
             Context.Client.CurrentUser.Username,
             Context.Client.CurrentUser.GetDisplayAvatarUrl(size: 256));

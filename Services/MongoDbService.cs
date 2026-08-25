@@ -40,6 +40,31 @@ public sealed class MongoDbService
             : result.Status;
     }
 
+    public IMongoCollection<T>? GetCollection<T>(
+        string databaseName,
+        string collectionName)
+    {
+        if (string.IsNullOrWhiteSpace(_connectionString))
+            return null;
+
+        try
+        {
+            var client = _client.Value;
+
+            if (client is null)
+                return null;
+
+            return client
+                .GetDatabase(databaseName)
+                .GetCollection<T>(collectionName);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[Mongo Collection Error] {exception.Message}");
+            return null;
+        }
+    }
+
     private async Task<DatabasePingResult> PingAsync()
     {
         var stopwatch = Stopwatch.StartNew();

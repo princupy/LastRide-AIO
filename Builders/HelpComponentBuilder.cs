@@ -4,7 +4,7 @@ namespace LastRide.Builders;
 
 public sealed class HelpComponentBuilder
 {
-    private const int TotalCommandCount = 29;
+    private const int TotalCommandCount = 45;
     private static readonly Color AccentColor = new(8, 4, 4);
 
     public MessageComponent Build(
@@ -34,7 +34,7 @@ public sealed class HelpComponentBuilder
             $"Hey {requesterMention}, I'm {EscapeInlineCode(botName)}, your Discord companion.";
 
         var summary =
-            $"> <:ArrowRight:1541407020257640470> **Default Prefix:** `{prefix}`\n" +
+            $"> <:ArrowRight:1541407020257640470> **Server Prefix:** `{prefix}`\n" +
             $"> <:ArrowRight:1541407020257640470> **Total Commands:** `{TotalCommandCount}`";
 
         var section = new SectionBuilder()
@@ -68,16 +68,31 @@ public sealed class HelpComponentBuilder
         string prefix,
         HelpCategory selectedCategory)
     {
+        var components = new List<IMessageComponentBuilder>();
+
+        if (selectedCategory == HelpCategory.AutoMod)
+        {
+            // AutoMod page shows two sections split by a separator: the core
+            // AutoMod commands, then the Badwords sub-feature below it.
+            components.Add(new TextDisplayBuilder(BuildAutoModContent(prefix)));
+            components.Add(Divider());
+            components.Add(new TextDisplayBuilder(BuildBadwordsContent(prefix)));
+        }
+        else
+        {
+            components.Add(new TextDisplayBuilder(BuildCategoryContent(
+                selectedCategory,
+                prefix)));
+        }
+
+        components.Add(Divider());
+        components.Add(BuildCategoryMenu(userId, selectedCategory));
+        components.Add(FooterSeparator());
+        components.Add(new TextDisplayBuilder(ComponentFooter.Text));
+
         var container = new ContainerBuilder()
             .WithAccentColor(AccentColor)
-            .AddComponents(
-                new TextDisplayBuilder(BuildCategoryContent(
-                    selectedCategory,
-                    prefix)),
-                Divider(),
-                BuildCategoryMenu(userId, selectedCategory),
-                FooterSeparator(),
-                new TextDisplayBuilder(ComponentFooter.Text));
+            .AddComponents(components.ToArray());
 
         return new ComponentBuilderV2()
             .AddComponent(container)
@@ -90,10 +105,27 @@ public sealed class HelpComponentBuilder
     {
         return category switch
         {
+            HelpCategory.AutoMod => BuildAutoModContent(prefix),
             HelpCategory.Utility => BuildUtilityContent(prefix),
             HelpCategory.Moderation => BuildModerationContent(prefix),
             _ => BuildUtilityContent(prefix)
         };
+    }
+
+    private static string BuildAutoModContent(string prefix)
+    {
+        return
+            "## AutoMod commands\n\n" +
+            $"`{prefix}automod`, `{prefix}anticaps`, `{prefix}antiduplicate`, `{prefix}antiemoji`, `{prefix}antiinvite`, `{prefix}antilink`, `{prefix}antimention`, `{prefix}antispam`, `{prefix}automodbypass`, `{prefix}automodlog`\n\n" +
+            $"-# `{prefix}automod` for the full overview • `{prefix}<rule> on/off` • `{prefix}<rule> action <delete|warn|mute|kick|ban>`";
+    }
+
+    private static string BuildBadwordsContent(string prefix)
+    {
+        return
+            "## Badwords\n\n" +
+            $"`{prefix}badwords add`, `{prefix}badwords remove`, `{prefix}badwords list`, `{prefix}badwords on`, `{prefix}badwords off`, `{prefix}badwords action`\n\n" +
+            $"-# `{prefix}badwords add <word>` to blacklist a word • `{prefix}badwords action <delete|warn|mute|kick|ban>`";
     }
 
     private static string BuildUtilityContent(string prefix)
@@ -107,7 +139,7 @@ public sealed class HelpComponentBuilder
     {
         return
             "## Moderation commands\n\n" +
-            $"`{prefix}ban`, `{prefix}unban`, `{prefix}kick`, `{prefix}mute`, `{prefix}unmute`, `{prefix}nick`, `{prefix}addrole`, `{prefix}roleicon`, `{prefix}snipe`, `{prefix}nuke`, `{prefix}purge`, `{prefix}lock`, `{prefix}unlock`, `{prefix}lockall`, `{prefix}unlockall`, `{prefix}hide`, `{prefix}unhide`, `{prefix}hideall`, `{prefix}unhideall`";
+            $"`{prefix}ban`, `{prefix}unban`, `{prefix}banlist`, `{prefix}kick`, `{prefix}mute`, `{prefix}unmute`, `{prefix}warn`, `{prefix}nick`, `{prefix}addrole`, `{prefix}roleicon`, `{prefix}steal`, `{prefix}deleteemoji`, `{prefix}setprefix`, `{prefix}snipe`, `{prefix}nuke`, `{prefix}purge`, `{prefix}lock`, `{prefix}unlock`, `{prefix}lockall`, `{prefix}unlockall`, `{prefix}hide`, `{prefix}unhide`, `{prefix}hideall`, `{prefix}unhideall`";
     }
 
     private static ActionRowBuilder BuildCategoryMenu(
@@ -115,6 +147,7 @@ public sealed class HelpComponentBuilder
         HelpCategory? selectedCategory)
     {
         var homeValue = HelpComponentIds.ToValue(HelpCategory.Home);
+        var autoModValue = HelpComponentIds.ToValue(HelpCategory.AutoMod);
         var utilityValue = HelpComponentIds.ToValue(HelpCategory.Utility);
         var moderationValue = HelpComponentIds.ToValue(HelpCategory.Moderation);
 
@@ -129,15 +162,20 @@ public sealed class HelpComponentBuilder
                 "Return to the main help menu",
                 isDefault: selectedCategory is null)
             .AddOption(
-                "Utility",
-                utilityValue,
-                "Ping and statistics commands",
-                isDefault: selectedCategory == HelpCategory.Utility)
+                "AutoMod",
+                autoModValue,
+                "Automatic moderation rules",
+                isDefault: selectedCategory == HelpCategory.AutoMod)
             .AddOption(
                 "Moderation",
                 moderationValue,
                 "Server moderation commands",
-                isDefault: selectedCategory == HelpCategory.Moderation);
+                isDefault: selectedCategory == HelpCategory.Moderation)
+            .AddOption(
+                "Utility",
+                utilityValue,
+                "Ping and statistics commands",
+                isDefault: selectedCategory == HelpCategory.Utility);
 
         return new ActionRowBuilder()
             .WithSelectMenu(menu);

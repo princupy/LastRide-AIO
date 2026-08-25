@@ -5,6 +5,7 @@ using Discord.Rest;
 using Discord.WebSocket;
 using LastRide.Builders;
 using LastRide.Configuration;
+using LastRide.Models;
 using LastRide.Services;
 
 namespace LastRide.Core;
@@ -20,7 +21,6 @@ public sealed class CommandHandler
     private readonly DiscordSocketClient _client;
     private readonly CommandService _commands;
     private readonly IServiceProvider _services;
-    private readonly BotOptions _options;
     private readonly BotStatsService _statsService;
     private readonly BotOwnerService _ownerService;
     private readonly StatsComponentBuilder _statsComponentBuilder;
@@ -32,6 +32,8 @@ public sealed class CommandHandler
     private readonly BanConfirmationService _banConfirmationService;
     private readonly UnbanComponentBuilder _unbanComponentBuilder;
     private readonly UnbanConfirmationService _unbanConfirmationService;
+    private readonly BanListComponentBuilder _banListComponentBuilder;
+    private readonly BanListService _banListService;
     private readonly KickComponentBuilder _kickComponentBuilder;
     private readonly KickConfirmationService _kickConfirmationService;
     private readonly NukeComponentBuilder _nukeComponentBuilder;
@@ -39,6 +41,10 @@ public sealed class CommandHandler
     private readonly AddRoleComponentBuilder _addRoleComponentBuilder;
     private readonly SnipeComponentBuilder _snipeComponentBuilder;
     private readonly SnipeService _snipeService;
+    private readonly PrefixService _prefixService;
+    private readonly AutoModConfigService _autoModConfigService;
+    private readonly AutoModService _autoModService;
+    private readonly AutoModComponentBuilder _autoModComponentBuilder;
     private readonly AfkService _afkService;
     private readonly AfkComponentBuilder _afkComponentBuilder;
     private readonly MentionComponentBuilder _mentionComponentBuilder;
@@ -49,7 +55,6 @@ public sealed class CommandHandler
         DiscordSocketClient client,
         CommandService commands,
         IServiceProvider services,
-        BotOptions options,
         BotStatsService statsService,
         BotOwnerService ownerService,
         StatsComponentBuilder statsComponentBuilder,
@@ -61,6 +66,8 @@ public sealed class CommandHandler
         BanConfirmationService banConfirmationService,
         UnbanComponentBuilder unbanComponentBuilder,
         UnbanConfirmationService unbanConfirmationService,
+        BanListComponentBuilder banListComponentBuilder,
+        BanListService banListService,
         KickComponentBuilder kickComponentBuilder,
         KickConfirmationService kickConfirmationService,
         NukeComponentBuilder nukeComponentBuilder,
@@ -68,6 +75,10 @@ public sealed class CommandHandler
         AddRoleComponentBuilder addRoleComponentBuilder,
         SnipeComponentBuilder snipeComponentBuilder,
         SnipeService snipeService,
+        PrefixService prefixService,
+        AutoModConfigService autoModConfigService,
+        AutoModService autoModService,
+        AutoModComponentBuilder autoModComponentBuilder,
         AfkService afkService,
         AfkComponentBuilder afkComponentBuilder,
         MentionComponentBuilder mentionComponentBuilder,
@@ -77,7 +88,6 @@ public sealed class CommandHandler
         _client = client;
         _commands = commands;
         _services = services;
-        _options = options;
         _statsService = statsService;
         _ownerService = ownerService;
         _statsComponentBuilder = statsComponentBuilder;
@@ -89,6 +99,8 @@ public sealed class CommandHandler
         _banConfirmationService = banConfirmationService;
         _unbanComponentBuilder = unbanComponentBuilder;
         _unbanConfirmationService = unbanConfirmationService;
+        _banListComponentBuilder = banListComponentBuilder;
+        _banListService = banListService;
         _kickComponentBuilder = kickComponentBuilder;
         _kickConfirmationService = kickConfirmationService;
         _nukeComponentBuilder = nukeComponentBuilder;
@@ -96,6 +108,10 @@ public sealed class CommandHandler
         _addRoleComponentBuilder = addRoleComponentBuilder;
         _snipeComponentBuilder = snipeComponentBuilder;
         _snipeService = snipeService;
+        _prefixService = prefixService;
+        _autoModConfigService = autoModConfigService;
+        _autoModService = autoModService;
+        _autoModComponentBuilder = autoModComponentBuilder;
         _afkService = afkService;
         _afkComponentBuilder = afkComponentBuilder;
         _mentionComponentBuilder = mentionComponentBuilder;
@@ -108,6 +124,9 @@ public sealed class CommandHandler
         await _commands.AddModulesAsync(
             Assembly.GetExecutingAssembly(),
             _services);
+
+        await _prefixService.LoadAsync();
+        await _autoModConfigService.LoadAsync();
 
         _client.MessageReceived += HandleMessageAsync;
         _client.MessageDeleted += HandleMessageDeletedAsync;
@@ -207,9 +226,14 @@ public sealed class CommandHandler
         if (message.Author.IsBot || message.Author.IsWebhook)
             return;
 
+        if (await _autoModService.ScanAsync(message))
+            return;
+
         var argumentPosition = 0;
+        var guildId = (message.Channel as SocketGuildChannel)?.Guild.Id;
+        var prefix = _prefixService.GetPrefix(guildId);
         var hasPrefix = message.HasStringPrefix(
-            _options.Prefix,
+            prefix,
             ref argumentPosition);
         var commandName = hasPrefix
             ? GetCommandName(message.Content, argumentPosition)
@@ -318,13 +342,14 @@ public sealed class CommandHandler
         var botName = _client.CurrentUser.Username;
         var botAvatarUrl = _client.CurrentUser.GetDisplayAvatarUrl(size: 256);
         var commandCount = _commands.Commands.Count();
+        var guildId = (message.Channel as SocketGuildChannel)?.Guild.Id;
 
         return message.Channel.SendMessageAsync(
             allowedMentions: AllowedMentions.None,
             components: _mentionComponentBuilder.Build(
                 botName,
                 botAvatarUrl,
-                _options.Prefix,
+                _prefixService.GetPrefix(guildId),
                 commandCount));
     }
 
@@ -397,6 +422,22 @@ public sealed class CommandHandler
                 component,
                 unbanAction,
                 unbanRequestId);
+            return;
+        }
+
+        if (BanListComponentIds.TryParse(
+                component.Data.CustomId,
+                out var banListAction,
+                out var banListSessionId,
+                out var banListPage,
+                out var banListTargetId))
+        {
+            await HandleBanListButtonAsync(
+                component,
+                banListAction,
+                banListSessionId,
+                banListPage,
+                banListTargetId);
             return;
         }
 
@@ -617,6 +658,114 @@ public sealed class CommandHandler
         catch
         {
             return false;
+        }
+    }
+
+    private async Task HandleBanListButtonAsync(
+        SocketMessageComponent component,
+        BanListAction action,
+        string sessionId,
+        int page,
+        ulong targetId)
+    {
+        if (!_banListService.TryGet(sessionId, out var session))
+        {
+            await component.RespondAsync(
+                "This ban list has expired. Run the command again.",
+                ephemeral: true);
+            return;
+        }
+
+        if (component.User.Id != session.RequesterId)
+        {
+            await component.RespondAsync(
+                "Only the user who opened this ban list can control it.",
+                ephemeral: true);
+            return;
+        }
+
+        // Pure navigation needs no API call.
+        if (action is BanListAction.Previous or BanListAction.Next)
+        {
+            await component.UpdateAsync(properties =>
+            {
+                properties.AllowedMentions = AllowedMentions.None;
+                properties.Components = _banListComponentBuilder.Build(
+                    session.Bans,
+                    sessionId,
+                    session.RequesterId,
+                    page);
+            });
+            return;
+        }
+
+        await component.DeferAsync();
+
+        try
+        {
+            var guild = _client.GetGuild(session.GuildId);
+            var moderator = guild?.GetUser(session.RequesterId);
+
+            if (guild is null || moderator is null)
+            {
+                await component.FollowupAsync(
+                    "I could not fetch the server or moderator.",
+                    ephemeral: true);
+                return;
+            }
+
+            var validationError = ValidateUnbanRequest(guild, moderator);
+
+            if (validationError is not null)
+            {
+                await component.FollowupAsync(
+                    validationError,
+                    ephemeral: true);
+                return;
+            }
+
+            if (action == BanListAction.Unban)
+            {
+                await TryRemoveBanAsync(guild, targetId);
+                _banListService.RemoveUser(sessionId, targetId);
+            }
+            else if (action == BanListAction.UnbanAll)
+            {
+                foreach (var ban in session.Bans.ToArray())
+                    await TryRemoveBanAsync(guild, ban.UserId);
+
+                _banListService.ClearUsers(sessionId);
+            }
+
+            await component.ModifyOriginalResponseAsync(properties =>
+            {
+                properties.AllowedMentions = AllowedMentions.None;
+                properties.Components = _banListComponentBuilder.Build(
+                    session.Bans,
+                    sessionId,
+                    session.RequesterId,
+                    page);
+            });
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[BanList Button Error] {exception}");
+
+            await component.FollowupAsync(
+                "Ban list update failed. Check my permissions.",
+                ephemeral: true);
+        }
+    }
+
+    private static async Task TryRemoveBanAsync(SocketGuild guild, ulong userId)
+    {
+        try
+        {
+            await guild.RemoveBanAsync(userId);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[BanList Unban Error] {userId}: {exception}");
         }
     }
 
@@ -1190,6 +1339,18 @@ public sealed class CommandHandler
             return;
         }
 
+        if (AutoModComponentIds.TryParseRulesMenu(
+                component.Data.CustomId,
+                out var autoModRequesterId,
+                out var autoModGuildId))
+        {
+            await HandleAutoModRulesSelectAsync(
+                component,
+                autoModRequesterId,
+                autoModGuildId);
+            return;
+        }
+
         if (!HelpComponentIds.TryParse(
                 component.Data.CustomId,
                 out var userId))
@@ -1219,9 +1380,10 @@ public sealed class CommandHandler
 
         try
         {
+            var guildId = (component.Channel as SocketGuildChannel)?.Guild.Id;
             var components = _helpComponentBuilder.Build(
                 userId,
-                _options.Prefix,
+                _prefixService.GetPrefix(guildId),
                 component.User.Mention,
                 _client.CurrentUser.Username,
                 _client.CurrentUser.GetDisplayAvatarUrl(size: 256),
@@ -1240,6 +1402,82 @@ public sealed class CommandHandler
                     "Help menu update failed.",
                     ephemeral: true);
             }
+        }
+    }
+
+    private async Task HandleAutoModRulesSelectAsync(
+        SocketMessageComponent component,
+        ulong requesterId,
+        ulong guildId)
+    {
+        if (component.User.Id != requesterId)
+        {
+            await component.RespondAsync(
+                "Only the user who enabled AutoMod can use this menu.",
+                ephemeral: true);
+            return;
+        }
+
+        await component.DeferAsync();
+
+        try
+        {
+            var guild = _client.GetGuild(guildId);
+            var moderator = guild?.GetUser(requesterId);
+
+            if (guild is null || moderator is null)
+            {
+                await component.FollowupAsync(
+                    "I could not fetch the server or moderator.",
+                    ephemeral: true);
+                return;
+            }
+
+            if (!(moderator.GuildPermissions.ManageGuild ||
+                  moderator.GuildPermissions.Administrator))
+            {
+                await component.FollowupAsync(
+                    "You no longer have permission to manage AutoMod.",
+                    ephemeral: true);
+                return;
+            }
+
+            var selectedRules = new HashSet<AutoModRuleType>();
+
+            foreach (var value in component.Data.Values)
+            {
+                if (Enum.TryParse<AutoModRuleType>(value, out var rule))
+                    selectedRules.Add(rule);
+            }
+
+            await _autoModConfigService.SetRulesEnabledAsync(
+                guildId,
+                selectedRules);
+
+            var config = _autoModConfigService.GetConfig(guildId);
+            var prefix = _prefixService.GetPrefix(guildId);
+
+            await component.ModifyOriginalResponseAsync(properties =>
+            {
+                properties.AllowedMentions = AllowedMentions.None;
+                properties.Components =
+                    _autoModComponentBuilder.BuildRulesConfigurator(
+                        "AutoMod Rules Updated",
+                        "Selected rules are enabled; unselected ones are disabled.",
+                        config,
+                        requesterId,
+                        guildId,
+                        _autoModConfigService.IsPersistent,
+                        prefix);
+            });
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[AutoMod Rules Select Error] {exception}");
+
+            await component.FollowupAsync(
+                "Updating AutoMod rules failed.",
+                ephemeral: true);
         }
     }
 

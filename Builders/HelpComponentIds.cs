@@ -3,6 +3,7 @@ namespace LastRide.Builders;
 public enum HelpCategory
 {
     Home,
+    AutoMod,
     Utility,
     Moderation
 }
@@ -40,12 +41,13 @@ public static class HelpComponentIds
         category = value switch
         {
             "home" => HelpCategory.Home,
+            "automod" => HelpCategory.AutoMod,
             "utility" => HelpCategory.Utility,
             "moderation" => HelpCategory.Moderation,
             _ => HelpCategory.Utility
         };
 
-        return value is "home" or "utility" or "moderation";
+        return value is "home" or "automod" or "utility" or "moderation";
     }
 
     public static string ToValue(HelpCategory category)
@@ -53,6 +55,7 @@ public static class HelpComponentIds
         return category switch
         {
             HelpCategory.Home => "home",
+            HelpCategory.AutoMod => "automod",
             HelpCategory.Utility => "utility",
             HelpCategory.Moderation => "moderation",
             _ => "utility"
