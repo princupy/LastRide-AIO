@@ -4,7 +4,7 @@ namespace LastRide.Builders;
 
 public sealed class HelpComponentBuilder
 {
-    private const int TotalCommandCount = 28;
+    private const int TotalCommandCount = 29;
     private static readonly Color AccentColor = new(8, 4, 4);
 
     public MessageComponent Build(
@@ -100,14 +100,14 @@ public sealed class HelpComponentBuilder
     {
         return
             "## Utility commands\n\n" +
-            $"`{prefix}ping`, `{prefix}stats`, `{prefix}avatar`, `{prefix}banner`, `{prefix}afk`, `{prefix}membercount`, `{prefix}userinfo`, `{prefix}serverinfo`, `{prefix}roleinfo`, `{prefix}help`";
+            $"`{prefix}ping`, `{prefix}stats`, `{prefix}avatar`, `{prefix}banner`, `{prefix}afk`, `{prefix}snipe`, `{prefix}membercount`, `{prefix}userinfo`, `{prefix}serverinfo`, `{prefix}roleinfo`, `{prefix}help`";
     }
 
     private static string BuildModerationContent(string prefix)
     {
         return
             "## Moderation commands\n\n" +
-            $"`{prefix}ban`, `{prefix}unban`, `{prefix}kick`, `{prefix}mute`, `{prefix}unmute`, `{prefix}nick`, `{prefix}addrole`, `{prefix}roleicon`, `{prefix}nuke`, `{prefix}purge`, `{prefix}lock`, `{prefix}unlock`, `{prefix}lockall`, `{prefix}unlockall`, `{prefix}hide`, `{prefix}unhide`, `{prefix}hideall`, `{prefix}unhideall`";
+            $"`{prefix}ban`, `{prefix}unban`, `{prefix}kick`, `{prefix}mute`, `{prefix}unmute`, `{prefix}nick`, `{prefix}addrole`, `{prefix}roleicon`, `{prefix}snipe`, `{prefix}nuke`, `{prefix}purge`, `{prefix}lock`, `{prefix}unlock`, `{prefix}lockall`, `{prefix}unlockall`, `{prefix}hide`, `{prefix}unhide`, `{prefix}hideall`, `{prefix}unhideall`";
     }
 
     private static ActionRowBuilder BuildCategoryMenu(

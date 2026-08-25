@@ -1,6 +1,7 @@
 using System.Reflection;
 using Discord;
 using Discord.Commands;
+using Discord.Rest;
 using Discord.WebSocket;
 using LastRide.Builders;
 using LastRide.Configuration;
@@ -10,6 +11,12 @@ namespace LastRide.Core;
 
 public sealed class CommandHandler
 {
+    private static readonly TimeSpan AuditLogLookupDelay =
+        TimeSpan.FromMilliseconds(1200);
+    private static readonly TimeSpan AuditLogMaxAge =
+        TimeSpan.FromSeconds(15);
+    private const int AuditLogLookupLimit = 5;
+
     private readonly DiscordSocketClient _client;
     private readonly CommandService _commands;
     private readonly IServiceProvider _services;
@@ -30,6 +37,8 @@ public sealed class CommandHandler
     private readonly NukeComponentBuilder _nukeComponentBuilder;
     private readonly NukeConfirmationService _nukeConfirmationService;
     private readonly AddRoleComponentBuilder _addRoleComponentBuilder;
+    private readonly SnipeComponentBuilder _snipeComponentBuilder;
+    private readonly SnipeService _snipeService;
     private readonly AfkService _afkService;
     private readonly AfkComponentBuilder _afkComponentBuilder;
     private readonly MentionComponentBuilder _mentionComponentBuilder;
@@ -57,6 +66,8 @@ public sealed class CommandHandler
         NukeComponentBuilder nukeComponentBuilder,
         NukeConfirmationService nukeConfirmationService,
         AddRoleComponentBuilder addRoleComponentBuilder,
+        SnipeComponentBuilder snipeComponentBuilder,
+        SnipeService snipeService,
         AfkService afkService,
         AfkComponentBuilder afkComponentBuilder,
         MentionComponentBuilder mentionComponentBuilder,
@@ -83,6 +94,8 @@ public sealed class CommandHandler
         _nukeComponentBuilder = nukeComponentBuilder;
         _nukeConfirmationService = nukeConfirmationService;
         _addRoleComponentBuilder = addRoleComponentBuilder;
+        _snipeComponentBuilder = snipeComponentBuilder;
+        _snipeService = snipeService;
         _afkService = afkService;
         _afkComponentBuilder = afkComponentBuilder;
         _mentionComponentBuilder = mentionComponentBuilder;
@@ -97,8 +110,93 @@ public sealed class CommandHandler
             _services);
 
         _client.MessageReceived += HandleMessageAsync;
+        _client.MessageDeleted += HandleMessageDeletedAsync;
         _client.ButtonExecuted += HandleButtonAsync;
         _client.SelectMenuExecuted += HandleSelectMenuAsync;
+    }
+
+    private Task HandleMessageDeletedAsync(
+        Cacheable<IMessage, ulong> cacheable,
+        Cacheable<IMessageChannel, ulong> channelCacheable)
+    {
+        if (!cacheable.HasValue)
+            return Task.CompletedTask;
+
+        if (cacheable.Value is not IUserMessage message)
+            return Task.CompletedTask;
+
+        if (message.Author.IsBot || message.Author.IsWebhook)
+            return Task.CompletedTask;
+
+        var authorName = message.Author is IGuildUser guildUser
+            ? guildUser.DisplayName
+            : message.Author.Username;
+
+        _snipeService.Store(new LastRide.Models.SnipedMessage(
+            message.Id,
+            message.Channel.Id,
+            message.Author.Id,
+            authorName,
+            message.Author.GetDisplayAvatarUrl(size: 256),
+            message.Content,
+            message.Attachments.Count,
+            message.Author.Id,
+            DateTimeOffset.UtcNow));
+
+        if (message.Channel is SocketGuildChannel guildChannel)
+        {
+            _ = ResolveDeleterAsync(
+                guildChannel.Guild,
+                guildChannel.Id,
+                message.Id,
+                message.Author.Id);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ResolveDeleterAsync(
+        SocketGuild guild,
+        ulong channelId,
+        ulong messageId,
+        ulong authorId)
+    {
+        try
+        {
+            // Discord writes the audit log entry slightly after the gateway event.
+            await Task.Delay(AuditLogLookupDelay);
+
+            if (!guild.CurrentUser.GuildPermissions.ViewAuditLog &&
+                !guild.CurrentUser.GuildPermissions.Administrator)
+            {
+                return;
+            }
+
+            var entries = await guild
+                .GetAuditLogsAsync(
+                    AuditLogLookupLimit,
+                    actionType: ActionType.MessageDeleted)
+                .FlattenAsync();
+
+            var match = entries.FirstOrDefault(entry =>
+                entry.Data is MessageDeleteAuditLogData data &&
+                data.ChannelId == channelId &&
+                data.Target?.Id == authorId &&
+                DateTimeOffset.UtcNow - entry.CreatedAt <= AuditLogMaxAge);
+
+            if (match?.User is null)
+                return;
+
+            _snipeService.SetDeletedBy(
+                channelId,
+                messageId,
+                match.User.Id);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine(
+                $"[Snipe Audit Log Error] {exception.Message}");
+        }
     }
 
     private async Task HandleMessageAsync(SocketMessage socketMessage)
@@ -339,6 +437,21 @@ public sealed class CommandHandler
                 addRoleGuildId,
                 addRoleTargetId,
                 addRoleRoleId);
+            return;
+        }
+
+        if (SnipeComponentIds.TryParse(
+                component.Data.CustomId,
+                out _,
+                out var snipeRequesterId,
+                out var snipeChannelId,
+                out var snipeIndex))
+        {
+            await HandleSnipeButtonAsync(
+                component,
+                snipeRequesterId,
+                snipeChannelId,
+                snipeIndex);
             return;
         }
 
@@ -1426,6 +1539,47 @@ public sealed class CommandHandler
             .OrderBy(channel => channel.Position)
             .ThenBy(channel => channel.Name)
             .ToArray();
+    }
+
+    private async Task HandleSnipeButtonAsync(
+        SocketMessageComponent component,
+        ulong requesterId,
+        ulong channelId,
+        int index)
+    {
+        if (component.User.Id != requesterId)
+        {
+            await component.RespondAsync(
+                "Only the user who opened this snipe panel can control it.",
+                ephemeral: true);
+            return;
+        }
+
+        try
+        {
+            var messages = _snipeService.GetMessages(channelId);
+
+            await component.UpdateAsync(properties =>
+            {
+                properties.AllowedMentions = AllowedMentions.None;
+                properties.Components = _snipeComponentBuilder.Build(
+                    messages,
+                    requesterId,
+                    channelId,
+                    index);
+            });
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[Snipe Button Error] {exception}");
+
+            if (!component.HasResponded)
+            {
+                await component.RespondAsync(
+                    "Snipe panel update failed.",
+                    ephemeral: true);
+            }
+        }
     }
 
     private async Task HandleAddRoleRemoveButtonAsync(
