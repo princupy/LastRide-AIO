@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Services;
 
 namespace LastRide.Modules;
 
@@ -12,10 +13,14 @@ public sealed class MuteModule : ModuleBase<SocketCommandContext>
     private static readonly TimeSpan DefaultDuration = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MaxDuration = TimeSpan.FromDays(28);
     private readonly MuteComponentBuilder _builder;
+    private readonly LogService _logService;
 
-    public MuteModule(MuteComponentBuilder builder)
+    public MuteModule(
+        MuteComponentBuilder builder,
+        LogService logService)
     {
         _builder = builder;
+        _logService = logService;
     }
 
     [Command("mute")]
@@ -112,6 +117,13 @@ public sealed class MuteModule : ModuleBase<SocketCommandContext>
                     expiresUnix,
                     reasonText,
                     moderator.Id));
+
+            await _logService.LogMuteAsync(
+                Context.Guild,
+                target,
+                moderator,
+                duration,
+                reasonText);
         }
         catch (Exception exception)
         {

@@ -6,6 +6,7 @@ public enum HelpCategory
     AutoMod,
     AutoRole,
     Voice,
+    Logs,
     Utility,
     Moderation
 }
@@ -46,12 +47,13 @@ public static class HelpComponentIds
             "automod" => HelpCategory.AutoMod,
             "autorole" => HelpCategory.AutoRole,
             "voice" => HelpCategory.Voice,
+            "logs" => HelpCategory.Logs,
             "utility" => HelpCategory.Utility,
             "moderation" => HelpCategory.Moderation,
             _ => HelpCategory.Utility
         };
 
-        return value is "home" or "automod" or "autorole" or "voice" or "utility" or "moderation";
+        return value is "home" or "automod" or "autorole" or "voice" or "logs" or "utility" or "moderation";
     }
 
     public static string ToValue(HelpCategory category)
@@ -62,6 +64,7 @@ public static class HelpComponentIds
             HelpCategory.AutoMod => "automod",
             HelpCategory.AutoRole => "autorole",
             HelpCategory.Voice => "voice",
+            HelpCategory.Logs => "logs",
             HelpCategory.Utility => "utility",
             HelpCategory.Moderation => "moderation",
             _ => "utility"

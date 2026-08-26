@@ -13,13 +13,16 @@ public sealed class WarnModule : ModuleBase<SocketCommandContext>
 
     private readonly WarnComponentBuilder _builder;
     private readonly WarnService _warnService;
+    private readonly LogService _logService;
 
     public WarnModule(
         WarnComponentBuilder builder,
-        WarnService warnService)
+        WarnService warnService,
+        LogService logService)
     {
         _builder = builder;
         _warnService = warnService;
+        _logService = logService;
     }
 
     [Command("warn")]
@@ -91,6 +94,13 @@ public sealed class WarnModule : ModuleBase<SocketCommandContext>
                 warning.Reason,
                 count,
                 moderator.Id));
+
+        await _logService.LogWarnAsync(
+            Context.Guild,
+            target,
+            moderator,
+            warning.Reason,
+            count);
     }
 
     private async Task ReplyNoticeAsync(string title, string message)

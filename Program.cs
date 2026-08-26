@@ -40,6 +40,7 @@ var socketConfig = new DiscordSocketConfig
     GatewayIntents =
         GatewayIntents.Guilds |
         GatewayIntents.GuildMembers |
+        GatewayIntents.GuildBans |
         GatewayIntents.GuildPresences |
         GatewayIntents.GuildMessages |
         GatewayIntents.GuildVoiceStates |
@@ -121,6 +122,9 @@ await using var services = new ServiceCollection()
     .AddSingleton<HideAllComponentBuilder>()
     .AddSingleton<UnhideAllComponentBuilder>()
     .AddSingleton<VoiceComponentBuilder>()
+    .AddSingleton<LogConfigService>()
+    .AddSingleton<LogService>()
+    .AddSingleton<LogComponentBuilder>()
     .BuildServiceProvider();
 
 await services

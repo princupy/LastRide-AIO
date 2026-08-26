@@ -55,6 +55,9 @@ public sealed class CommandHandler
     private readonly UnhideAllComponentBuilder _unhideAllComponentBuilder;
     private readonly UnlockAllComponentBuilder _unlockAllComponentBuilder;
     private readonly VoiceComponentBuilder _voiceComponentBuilder;
+    private readonly LogConfigService _logConfigService;
+    private readonly LogService _logService;
+    private readonly LogComponentBuilder _logComponentBuilder;
 
     public CommandHandler(
         DiscordSocketClient client,
@@ -93,7 +96,10 @@ public sealed class CommandHandler
         MentionComponentBuilder mentionComponentBuilder,
         UnhideAllComponentBuilder unhideAllComponentBuilder,
         UnlockAllComponentBuilder unlockAllComponentBuilder,
-        VoiceComponentBuilder voiceComponentBuilder)
+        VoiceComponentBuilder voiceComponentBuilder,
+        LogConfigService logConfigService,
+        LogService logService,
+        LogComponentBuilder logComponentBuilder)
     {
         _client = client;
         _commands = commands;
@@ -132,6 +138,9 @@ public sealed class CommandHandler
         _unhideAllComponentBuilder = unhideAllComponentBuilder;
         _unlockAllComponentBuilder = unlockAllComponentBuilder;
         _voiceComponentBuilder = voiceComponentBuilder;
+        _logConfigService = logConfigService;
+        _logService = logService;
+        _logComponentBuilder = logComponentBuilder;
     }
 
     public async Task InitializeAsync()
@@ -144,13 +153,100 @@ public sealed class CommandHandler
         await _autoModConfigService.LoadAsync();
         await _autoRoleConfigService.LoadAsync();
         await _autoResponderConfigService.LoadAsync();
+        await _logConfigService.LoadAsync();
 
         _client.MessageReceived += HandleMessageAsync;
         _client.MessageDeleted += HandleMessageDeletedAsync;
         _client.ButtonExecuted += HandleButtonAsync;
-        _client.SelectMenuExecuted += HandleSelectMenuAsync;
+        // Fire-and-forget: the log-setup menu creates channels (several HTTP
+        // calls), which must not block the gateway task.
+        _client.SelectMenuExecuted += component =>
+        {
+            _ = HandleSelectMenuAsync(component);
+            return Task.CompletedTask;
+        };
         _client.UserJoined += _autoRoleService.HandleUserJoinedAsync;
         _client.UserVoiceStateUpdated += _autoRoleService.HandleVoiceStateUpdatedAsync;
+
+        // Logging service — fire-and-forget so slow audit-log lookups (1.2s
+        // delay + HTTP) and channel/message HTTP calls run detached and never
+        // block the gateway task. Each handler self-gates on the guild's config
+        // and catches its own errors.
+        _client.MessageDeleted += (message, channel) =>
+        {
+            _ = _logService.HandleMessageDeletedAsync(message, channel);
+            return Task.CompletedTask;
+        };
+        _client.MessageUpdated += (before, after, channel) =>
+        {
+            _ = _logService.HandleMessageUpdatedAsync(before, after, channel);
+            return Task.CompletedTask;
+        };
+        _client.MessagesBulkDeleted += (messages, channel) =>
+        {
+            _ = _logService.HandleMessagesBulkDeletedAsync(messages, channel);
+            return Task.CompletedTask;
+        };
+        _client.UserJoined += user =>
+        {
+            _ = _logService.HandleUserJoinedAsync(user);
+            return Task.CompletedTask;
+        };
+        _client.UserLeft += (guild, user) =>
+        {
+            _ = _logService.HandleUserLeftAsync(guild, user);
+            return Task.CompletedTask;
+        };
+        _client.UserBanned += (user, guild) =>
+        {
+            _ = _logService.HandleUserBannedAsync(user, guild);
+            return Task.CompletedTask;
+        };
+        _client.UserUnbanned += (user, guild) =>
+        {
+            _ = _logService.HandleUserUnbannedAsync(user, guild);
+            return Task.CompletedTask;
+        };
+        _client.UserVoiceStateUpdated += (user, before, after) =>
+        {
+            _ = _logService.HandleVoiceStateUpdatedAsync(user, before, after);
+            return Task.CompletedTask;
+        };
+        _client.GuildMemberUpdated += (before, after) =>
+        {
+            _ = _logService.HandleGuildMemberUpdatedAsync(before, after);
+            return Task.CompletedTask;
+        };
+        _client.ChannelCreated += channel =>
+        {
+            _ = _logService.HandleChannelCreatedAsync(channel);
+            return Task.CompletedTask;
+        };
+        _client.ChannelDestroyed += channel =>
+        {
+            _ = _logService.HandleChannelDestroyedAsync(channel);
+            return Task.CompletedTask;
+        };
+        _client.ChannelUpdated += (before, after) =>
+        {
+            _ = _logService.HandleChannelUpdatedAsync(before, after);
+            return Task.CompletedTask;
+        };
+        _client.RoleCreated += role =>
+        {
+            _ = _logService.HandleRoleCreatedAsync(role);
+            return Task.CompletedTask;
+        };
+        _client.RoleDeleted += role =>
+        {
+            _ = _logService.HandleRoleDeletedAsync(role);
+            return Task.CompletedTask;
+        };
+        _client.RoleUpdated += (before, after) =>
+        {
+            _ = _logService.HandleRoleUpdatedAsync(before, after);
+            return Task.CompletedTask;
+        };
     }
 
     private Task HandleMessageDeletedAsync(
@@ -1001,6 +1097,12 @@ public sealed class CommandHandler
 
             _kickConfirmationService.TryRemove(requestId, out _);
 
+            await _logService.LogKickAsync(
+                guild,
+                targetMember,
+                moderator,
+                request.Reason);
+
             await component.ModifyOriginalResponseAsync(properties =>
             {
                 properties.AllowedMentions = AllowedMentions.None;
@@ -1390,6 +1492,18 @@ public sealed class CommandHandler
             return;
         }
 
+        if (LogComponentIds.TryParseSetupMenu(
+                component.Data.CustomId,
+                out var logRequesterId,
+                out var logGuildId))
+        {
+            await HandleLogSetupSelectAsync(
+                component,
+                logRequesterId,
+                logGuildId);
+            return;
+        }
+
         if (!HelpComponentIds.TryParse(
                 component.Data.CustomId,
                 out var userId))
@@ -1518,6 +1632,200 @@ public sealed class CommandHandler
                 "Updating AutoMod rules failed.",
                 ephemeral: true);
         }
+    }
+
+    private async Task HandleLogSetupSelectAsync(
+        SocketMessageComponent component,
+        ulong requesterId,
+        ulong guildId)
+    {
+        if (component.User.Id != requesterId)
+        {
+            await component.RespondAsync(
+                "Only the user who enabled logging can use this menu.",
+                ephemeral: true);
+            return;
+        }
+
+        await component.DeferAsync();
+
+        try
+        {
+            var guild = _client.GetGuild(guildId);
+            var moderator = guild?.GetUser(requesterId);
+
+            if (guild is null || moderator is null)
+            {
+                await component.FollowupAsync(
+                    "I could not fetch the server or moderator.",
+                    ephemeral: true);
+                return;
+            }
+
+            if (!(moderator.GuildPermissions.ManageGuild ||
+                  moderator.GuildPermissions.Administrator))
+            {
+                await component.FollowupAsync(
+                    "You no longer have permission to manage logging.",
+                    ephemeral: true);
+                return;
+            }
+
+            var bot = guild.CurrentUser;
+
+            if (!(bot.GuildPermissions.ManageChannels ||
+                  bot.GuildPermissions.Administrator))
+            {
+                await component.FollowupAsync(
+                    "I need the `Manage Channels` permission to create log channels.",
+                    ephemeral: true);
+                return;
+            }
+
+            var selectedTypes = new HashSet<LogType>();
+
+            foreach (var value in component.Data.Values)
+            {
+                if (Enum.TryParse<LogType>(value, out var type))
+                    selectedTypes.Add(type);
+            }
+
+            // Snapshot the config before mutating so the create/clear decisions
+            // read the pre-selection state (SetChannelAsync swaps the cache entry
+            // for a fresh clone, leaving this reference frozen).
+            var current = _logConfigService.GetConfig(guildId);
+
+            var toCreate = Enum.GetValues<LogType>()
+                .Where(type => selectedTypes.Contains(type))
+                .Where(type =>
+                    current.GetChannel(type) is not { } existing ||
+                    guild.GetTextChannel(existing) is null)
+                .ToList();
+
+            // Group the auto-created channels under a single "Logs" category.
+            var categoryId = toCreate.Count > 0
+                ? await ResolveLogCategoryIdAsync(guild)
+                : null;
+
+            foreach (var type in toCreate)
+            {
+                var created = await guild.CreateTextChannelAsync(
+                    DefaultLogChannelName(type),
+                    properties =>
+                    {
+                        if (categoryId is { } id)
+                            properties.CategoryId = id;
+
+                        // Private from birth: deny @everyone view, keep the bot
+                        // in — no public window between create and lock-down.
+                        properties.PermissionOverwrites =
+                            BuildPrivateLogOverwrites(guild);
+                    },
+                    new RequestOptions
+                    {
+                        AuditLogReason =
+                            $"Log channel created by {moderator.Username}"
+                    });
+
+                await _logConfigService.SetChannelAsync(guildId, type, created.Id);
+            }
+
+            // Deselecting a type stops logging it. Only the mapping is cleared —
+            // the channel itself is left in place to avoid destroying history.
+            foreach (var type in Enum.GetValues<LogType>())
+            {
+                if (!selectedTypes.Contains(type) &&
+                    current.GetChannel(type) is not null)
+                {
+                    await _logConfigService.SetChannelAsync(guildId, type, null);
+                }
+            }
+
+            await _logConfigService.SetEnabledAsync(guildId, true);
+
+            var config = _logConfigService.GetConfig(guildId);
+            var prefix = _prefixService.GetPrefix(guildId);
+
+            await component.ModifyOriginalResponseAsync(properties =>
+            {
+                properties.AllowedMentions = AllowedMentions.None;
+                properties.Components = _logComponentBuilder.BuildSetupConfigurator(
+                    "Logging Updated",
+                    "Selected types now log to their channels; deselected types are off.",
+                    config,
+                    requesterId,
+                    guildId,
+                    _logConfigService.IsPersistent,
+                    prefix);
+            });
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[Logs Setup Select Error] {exception}");
+
+            await component.FollowupAsync(
+                "Updating logging failed. Check my permissions and role position.",
+                ephemeral: true);
+        }
+    }
+
+    private static async Task<ulong?> ResolveLogCategoryIdAsync(SocketGuild guild)
+    {
+        var existing = guild.CategoryChannels.FirstOrDefault(category =>
+            category.Name.Equals("Logs", StringComparison.OrdinalIgnoreCase));
+
+        if (existing is not null)
+            return existing.Id;
+
+        // Only a freshly created category is locked down; an existing "Logs"
+        // category is left exactly as the server configured it.
+        var created = await guild.CreateCategoryChannelAsync(
+            "Logs",
+            properties =>
+            {
+                properties.PermissionOverwrites =
+                    BuildPrivateLogOverwrites(guild);
+            },
+            new RequestOptions
+            {
+                AuditLogReason = "Logs category for server logging channels"
+            });
+
+        return created?.Id;
+    }
+
+    // Log channels/category are created private: @everyone loses view, and the
+    // bot gets an explicit allow so it can still see and post there (needed when
+    // the bot lacks Administrator, where the @everyone deny would hide it too).
+    private static Overwrite[] BuildPrivateLogOverwrites(SocketGuild guild)
+    {
+        return new[]
+        {
+            new Overwrite(
+                guild.EveryoneRole.Id,
+                PermissionTarget.Role,
+                new OverwritePermissions(viewChannel: PermValue.Deny)),
+            new Overwrite(
+                guild.CurrentUser.Id,
+                PermissionTarget.User,
+                new OverwritePermissions(
+                    viewChannel: PermValue.Allow,
+                    sendMessages: PermValue.Allow))
+        };
+    }
+
+    private static string DefaultLogChannelName(LogType type)
+    {
+        return type switch
+        {
+            LogType.Messages => "message-logs",
+            LogType.Members => "member-logs",
+            LogType.Voice => "voice-logs",
+            LogType.Moderation => "moderation-logs",
+            LogType.Roles => "role-logs",
+            LogType.Server => "server-logs",
+            _ => "server-logs"
+        };
     }
 
     private async Task HandleUnhideAllSelectAsync(

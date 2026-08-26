@@ -4,7 +4,7 @@ namespace LastRide.Builders;
 
 public sealed class HelpComponentBuilder
 {
-    private const int TotalCommandCount = 67;
+    private const int TotalCommandCount = 72;
     private static readonly Color AccentColor = new(8, 4, 4);
 
     public MessageComponent Build(
@@ -128,6 +128,7 @@ public sealed class HelpComponentBuilder
             HelpCategory.AutoMod => BuildAutoModContent(prefix),
             HelpCategory.AutoRole => BuildAutoRoleContent(prefix),
             HelpCategory.Voice => BuildVoiceStateContent(prefix),
+            HelpCategory.Logs => BuildLogsContent(prefix),
             HelpCategory.Utility => BuildUtilityContent(prefix),
             HelpCategory.Moderation => BuildModerationContent(prefix),
             _ => BuildUtilityContent(prefix)
@@ -187,6 +188,13 @@ public sealed class HelpComponentBuilder
             $"`{prefix}vclock`, `{prefix}vcunlock`, `{prefix}vchide`, `{prefix}vcunhide`, `{prefix}vclist`";
     }
 
+    private static string BuildLogsContent(string prefix)
+    {
+        return
+            "## Logs commands\n\n" +
+            $"`{prefix}logenable`, `{prefix}logconfig`, `{prefix}logset`, `{prefix}logdisable`, `{prefix}logreset`";
+    }
+
     private static string BuildAutoResponderContent(string prefix)
     {
         return
@@ -217,6 +225,7 @@ public sealed class HelpComponentBuilder
         var autoModValue = HelpComponentIds.ToValue(HelpCategory.AutoMod);
         var autoRoleValue = HelpComponentIds.ToValue(HelpCategory.AutoRole);
         var voiceValue = HelpComponentIds.ToValue(HelpCategory.Voice);
+        var logsValue = HelpComponentIds.ToValue(HelpCategory.Logs);
         var utilityValue = HelpComponentIds.ToValue(HelpCategory.Utility);
         var moderationValue = HelpComponentIds.ToValue(HelpCategory.Moderation);
 
@@ -245,6 +254,11 @@ public sealed class HelpComponentBuilder
                 voiceValue,
                 "Voice channel moderation commands",
                 isDefault: selectedCategory == HelpCategory.Voice)
+            .AddOption(
+                "Logs",
+                logsValue,
+                "Server event logging channels",
+                isDefault: selectedCategory == HelpCategory.Logs)
             .AddOption(
                 "Moderation",
                 moderationValue,
