@@ -42,6 +42,7 @@ var socketConfig = new DiscordSocketConfig
         GatewayIntents.GuildMembers |
         GatewayIntents.GuildPresences |
         GatewayIntents.GuildMessages |
+        GatewayIntents.GuildVoiceStates |
         GatewayIntents.DirectMessages |
         GatewayIntents.MessageContent,
 
@@ -72,6 +73,10 @@ await using var services = new ServiceCollection()
     .AddSingleton<PrefixService>()
     .AddSingleton<AutoModConfigService>()
     .AddSingleton<AutoModService>()
+    .AddSingleton<AutoRoleConfigService>()
+    .AddSingleton<AutoRoleService>()
+    .AddSingleton<AutoResponderConfigService>()
+    .AddSingleton<AutoResponderService>()
     .AddSingleton<PingComponentBuilder>()
     .AddSingleton<StatsComponentBuilder>()
     .AddSingleton<HelpComponentBuilder>()
@@ -105,6 +110,8 @@ await using var services = new ServiceCollection()
     .AddSingleton<DeleteEmojiComponentBuilder>()
     .AddSingleton<SetPrefixComponentBuilder>()
     .AddSingleton<AutoModComponentBuilder>()
+    .AddSingleton<AutoRoleComponentBuilder>()
+    .AddSingleton<AutoResponderComponentBuilder>()
     .AddSingleton<LockComponentBuilder>()
     .AddSingleton<UnlockComponentBuilder>()
     .AddSingleton<LockAllComponentBuilder>()
@@ -113,6 +120,7 @@ await using var services = new ServiceCollection()
     .AddSingleton<UnhideComponentBuilder>()
     .AddSingleton<HideAllComponentBuilder>()
     .AddSingleton<UnhideAllComponentBuilder>()
+    .AddSingleton<VoiceComponentBuilder>()
     .BuildServiceProvider();
 
 await services

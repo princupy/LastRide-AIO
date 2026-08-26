@@ -45,11 +45,16 @@ public sealed class CommandHandler
     private readonly AutoModConfigService _autoModConfigService;
     private readonly AutoModService _autoModService;
     private readonly AutoModComponentBuilder _autoModComponentBuilder;
+    private readonly AutoRoleConfigService _autoRoleConfigService;
+    private readonly AutoRoleService _autoRoleService;
+    private readonly AutoResponderConfigService _autoResponderConfigService;
+    private readonly AutoResponderService _autoResponderService;
     private readonly AfkService _afkService;
     private readonly AfkComponentBuilder _afkComponentBuilder;
     private readonly MentionComponentBuilder _mentionComponentBuilder;
     private readonly UnhideAllComponentBuilder _unhideAllComponentBuilder;
     private readonly UnlockAllComponentBuilder _unlockAllComponentBuilder;
+    private readonly VoiceComponentBuilder _voiceComponentBuilder;
 
     public CommandHandler(
         DiscordSocketClient client,
@@ -79,11 +84,16 @@ public sealed class CommandHandler
         AutoModConfigService autoModConfigService,
         AutoModService autoModService,
         AutoModComponentBuilder autoModComponentBuilder,
+        AutoRoleConfigService autoRoleConfigService,
+        AutoRoleService autoRoleService,
+        AutoResponderConfigService autoResponderConfigService,
+        AutoResponderService autoResponderService,
         AfkService afkService,
         AfkComponentBuilder afkComponentBuilder,
         MentionComponentBuilder mentionComponentBuilder,
         UnhideAllComponentBuilder unhideAllComponentBuilder,
-        UnlockAllComponentBuilder unlockAllComponentBuilder)
+        UnlockAllComponentBuilder unlockAllComponentBuilder,
+        VoiceComponentBuilder voiceComponentBuilder)
     {
         _client = client;
         _commands = commands;
@@ -112,11 +122,16 @@ public sealed class CommandHandler
         _autoModConfigService = autoModConfigService;
         _autoModService = autoModService;
         _autoModComponentBuilder = autoModComponentBuilder;
+        _autoRoleConfigService = autoRoleConfigService;
+        _autoRoleService = autoRoleService;
+        _autoResponderConfigService = autoResponderConfigService;
+        _autoResponderService = autoResponderService;
         _afkService = afkService;
         _afkComponentBuilder = afkComponentBuilder;
         _mentionComponentBuilder = mentionComponentBuilder;
         _unhideAllComponentBuilder = unhideAllComponentBuilder;
         _unlockAllComponentBuilder = unlockAllComponentBuilder;
+        _voiceComponentBuilder = voiceComponentBuilder;
     }
 
     public async Task InitializeAsync()
@@ -127,11 +142,15 @@ public sealed class CommandHandler
 
         await _prefixService.LoadAsync();
         await _autoModConfigService.LoadAsync();
+        await _autoRoleConfigService.LoadAsync();
+        await _autoResponderConfigService.LoadAsync();
 
         _client.MessageReceived += HandleMessageAsync;
         _client.MessageDeleted += HandleMessageDeletedAsync;
         _client.ButtonExecuted += HandleButtonAsync;
         _client.SelectMenuExecuted += HandleSelectMenuAsync;
+        _client.UserJoined += _autoRoleService.HandleUserJoinedAsync;
+        _client.UserVoiceStateUpdated += _autoRoleService.HandleVoiceStateUpdatedAsync;
     }
 
     private Task HandleMessageDeletedAsync(
@@ -253,7 +272,11 @@ public sealed class CommandHandler
         }
 
         if (!hasPrefix)
+        {
+            // Not a command — let the autoresponder look for a trigger match.
+            await _autoResponderService.HandleMessageAsync(message);
             return;
+        }
 
         var context = new SocketCommandContext(_client, message);
 
@@ -1315,6 +1338,22 @@ public sealed class CommandHandler
 
     private async Task HandleSelectMenuAsync(SocketMessageComponent component)
     {
+        if (VoiceComponentIds.TryParseMenu(
+                component.Data.CustomId,
+                out var voiceOp,
+                out var voiceRequesterId,
+                out var voiceGuildId,
+                out var voiceTargetId))
+        {
+            await HandleVoiceMenuSelectAsync(
+                component,
+                voiceOp,
+                voiceRequesterId,
+                voiceGuildId,
+                voiceTargetId);
+            return;
+        }
+
         if (UnhideAllComponentIds.TryParseMenu(
                 component.Data.CustomId,
                 out var unhideAllRequesterId,
@@ -1779,6 +1818,228 @@ public sealed class CommandHandler
             .ToArray();
     }
 
+    private async Task HandleVoiceMenuSelectAsync(
+        SocketMessageComponent component,
+        string op,
+        ulong requesterId,
+        ulong guildId,
+        ulong targetId)
+    {
+        if (component.User.Id != requesterId)
+        {
+            await component.RespondAsync(
+                "Only the user who opened this menu can control it.",
+                ephemeral: true);
+            return;
+        }
+
+        await component.DeferAsync();
+
+        try
+        {
+            var guild = _client.GetGuild(guildId);
+            var moderator = guild?.GetUser(requesterId);
+
+            if (guild is null || moderator is null)
+            {
+                await component.FollowupAsync(
+                    "I could not fetch the server or moderator.",
+                    ephemeral: true);
+                return;
+            }
+
+            if (!HasMoveMembers(moderator.GuildPermissions))
+            {
+                await component.FollowupAsync(
+                    "You no longer have permission to move members.",
+                    ephemeral: true);
+                return;
+            }
+
+            if (!HasMoveMembers(guild.CurrentUser.GuildPermissions))
+            {
+                await component.FollowupAsync(
+                    "I no longer have permission to move members.",
+                    ephemeral: true);
+                return;
+            }
+
+            var selectedValue = component.Data.Values.FirstOrDefault();
+
+            if (selectedValue is null ||
+                !VoiceComponentIds.TryParseChannelValue(
+                    selectedValue,
+                    out var selectedChannelId))
+            {
+                await ModifyToVoiceNoticeAsync(
+                    component,
+                    "Invalid Selection",
+                    "That selection was not valid.");
+                return;
+            }
+
+            var selectedChannel = guild.GetVoiceChannel(selectedChannelId);
+
+            if (selectedChannel is null)
+            {
+                await ModifyToVoiceNoticeAsync(
+                    component,
+                    "Channel Not Found",
+                    "That voice channel no longer exists.");
+                return;
+            }
+
+            var botId = guild.CurrentUser.Id;
+
+            if (op == "move")
+            {
+                var target = guild.GetUser(targetId);
+
+                if (target is null || target.VoiceChannel is null)
+                {
+                    await ModifyToVoiceNoticeAsync(
+                        component,
+                        "Not In Voice",
+                        "That member is no longer connected to a voice channel.");
+                    return;
+                }
+
+                if (target.VoiceChannel.Id == selectedChannel.Id)
+                {
+                    await ModifyToVoiceNoticeAsync(
+                        component,
+                        "Already There",
+                        $"<@{target.Id}> is already in that channel.");
+                    return;
+                }
+
+                await target.ModifyAsync(
+                    properties => properties.Channel = selectedChannel,
+                    new RequestOptions
+                    {
+                        AuditLogReason = $"Voice move by {moderator.Username}"
+                    });
+
+                await component.ModifyOriginalResponseAsync(properties =>
+                {
+                    properties.AllowedMentions = AllowedMentions.None;
+                    properties.Components = _voiceComponentBuilder.BuildActionResult(
+                        "Member Moved",
+                        target.Id,
+                        moderator.Id,
+                        $"**Channel:** <#{selectedChannel.Id}>");
+                });
+                return;
+            }
+
+            // moveall / pullall both need the moderator's live current channel.
+            var moderatorChannel = moderator.VoiceChannel;
+
+            if (moderatorChannel is null)
+            {
+                await ModifyToVoiceNoticeAsync(
+                    component,
+                    "Not In Voice",
+                    "You need to be in a voice channel to use this.");
+                return;
+            }
+
+            var (source, destination, title) = op == "pullall"
+                ? (selectedChannel, moderatorChannel, "Pulled Members (All)")
+                : (moderatorChannel, selectedChannel, "Moved Members (All)");
+
+            if (source.Id == destination.Id)
+            {
+                await ModifyToVoiceNoticeAsync(
+                    component,
+                    "Same Channel",
+                    "Pick a different voice channel.");
+                return;
+            }
+
+            var (moved, skipped, failed) = await MoveConnectedUsersAsync(
+                source,
+                destination,
+                botId,
+                moderator);
+
+            await component.ModifyOriginalResponseAsync(properties =>
+            {
+                properties.AllowedMentions = AllowedMentions.None;
+                properties.Components = _voiceComponentBuilder.BuildBulkResult(
+                    title,
+                    moved,
+                    skipped,
+                    failed,
+                    moderator.Id,
+                    destination.Name);
+            });
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[Voice Select Error] {exception}");
+
+            await component.FollowupAsync(
+                "The voice action failed. Check my permissions.",
+                ephemeral: true);
+        }
+    }
+
+    private static async Task<(int Moved, int Skipped, int Failed)> MoveConnectedUsersAsync(
+        SocketVoiceChannel source,
+        SocketVoiceChannel destination,
+        ulong botId,
+        SocketGuildUser moderator)
+    {
+        var moved = 0;
+        var skipped = 0;
+        var failed = 0;
+
+        foreach (var member in source.ConnectedUsers.ToArray())
+        {
+            if (member.Id == botId)
+                continue;
+
+            if (member.VoiceChannel?.Id == destination.Id)
+            {
+                skipped++;
+                continue;
+            }
+
+            try
+            {
+                await member.ModifyAsync(
+                    properties => properties.Channel = destination,
+                    new RequestOptions
+                    {
+                        AuditLogReason = $"Voice move by {moderator.Username}"
+                    });
+
+                moved++;
+            }
+            catch (Exception exception)
+            {
+                failed++;
+                Console.WriteLine(
+                    $"[Voice Move Error] {member.Id}: {exception.Message}");
+            }
+        }
+
+        return (moved, skipped, failed);
+    }
+
+    private async Task ModifyToVoiceNoticeAsync(
+        SocketMessageComponent component,
+        string title,
+        string message)
+    {
+        await component.ModifyOriginalResponseAsync(properties =>
+        {
+            properties.AllowedMentions = AllowedMentions.None;
+            properties.Components = _voiceComponentBuilder.BuildNotice(title, message);
+        });
+    }
+
     private async Task HandleSnipeButtonAsync(
         SocketMessageComponent component,
         ulong requesterId,
@@ -1967,5 +2228,10 @@ public sealed class CommandHandler
     private static bool CanEditChannelPermissions(GuildPermissions permissions)
     {
         return permissions.ManageRoles || permissions.Administrator;
+    }
+
+    private static bool HasMoveMembers(GuildPermissions permissions)
+    {
+        return permissions.MoveMembers || permissions.Administrator;
     }
 }

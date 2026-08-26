@@ -4,7 +4,7 @@ namespace LastRide.Builders;
 
 public sealed class HelpComponentBuilder
 {
-    private const int TotalCommandCount = 45;
+    private const int TotalCommandCount = 67;
     private static readonly Color AccentColor = new(8, 4, 4);
 
     public MessageComponent Build(
@@ -78,6 +78,26 @@ public sealed class HelpComponentBuilder
             components.Add(Divider());
             components.Add(new TextDisplayBuilder(BuildBadwordsContent(prefix)));
         }
+        else if (selectedCategory == HelpCategory.AutoRole)
+        {
+            // AutoRole page stacks three sections split by separators: the core
+            // Autorole commands, then Autoresponder, then the VC Role feature.
+            components.Add(new TextDisplayBuilder(BuildAutoRoleContent(prefix)));
+            components.Add(Divider());
+            components.Add(new TextDisplayBuilder(BuildAutoResponderContent(prefix)));
+            components.Add(Divider());
+            components.Add(new TextDisplayBuilder(BuildVcRoleContent(prefix)));
+        }
+        else if (selectedCategory == HelpCategory.Voice)
+        {
+            // Voice page stacks three sections split by separators: mute &
+            // deafen, then move/kick/pull, then channel controls & info.
+            components.Add(new TextDisplayBuilder(BuildVoiceStateContent(prefix)));
+            components.Add(Divider());
+            components.Add(new TextDisplayBuilder(BuildVoiceMoveContent(prefix)));
+            components.Add(Divider());
+            components.Add(new TextDisplayBuilder(BuildVoiceChannelContent(prefix)));
+        }
         else
         {
             components.Add(new TextDisplayBuilder(BuildCategoryContent(
@@ -106,6 +126,8 @@ public sealed class HelpComponentBuilder
         return category switch
         {
             HelpCategory.AutoMod => BuildAutoModContent(prefix),
+            HelpCategory.AutoRole => BuildAutoRoleContent(prefix),
+            HelpCategory.Voice => BuildVoiceStateContent(prefix),
             HelpCategory.Utility => BuildUtilityContent(prefix),
             HelpCategory.Moderation => BuildModerationContent(prefix),
             _ => BuildUtilityContent(prefix)
@@ -128,6 +150,51 @@ public sealed class HelpComponentBuilder
             $"-# `{prefix}badwords add <word>` to blacklist a word • `{prefix}badwords action <delete|warn|mute|kick|ban>`";
     }
 
+    private static string BuildAutoRoleContent(string prefix)
+    {
+        return
+            "## Autorole commands\n\n" +
+            $"`{prefix}autorole add`, `{prefix}autorole humans`, `{prefix}autorole bots`, `{prefix}autorole remove`, `{prefix}autorole list`, `{prefix}autorole status`, `{prefix}autorole on`, `{prefix}autorole off`, `{prefix}autorole reset`\n\n" +
+            $"-# Assigns roles to members and bots on join • `{prefix}autorole add @role` for everyone • `{prefix}autorole humans/bots @role` to target one";
+    }
+
+    private static string BuildVcRoleContent(string prefix)
+    {
+        return
+            "## VC Role\n\n" +
+            $"`{prefix}vcrole set`, `{prefix}vcrole remove`, `{prefix}vcrole status`, `{prefix}vcrole on`, `{prefix}vcrole off`, `{prefix}vcrole reset`\n\n" +
+            $"-# Gives a role while in a voice channel, auto-removed on leave • `{prefix}vcrole set @role`";
+    }
+
+    private static string BuildVoiceStateContent(string prefix)
+    {
+        return
+            "## Voice — Mute & Deafen\n\n" +
+            $"`{prefix}vcmute`, `{prefix}vcunmute`, `{prefix}vcmuteall`, `{prefix}vcunmuteall`, `{prefix}vcdeafen`, `{prefix}vcundeafen`, `{prefix}vcdeafenall`, `{prefix}vcundeafenall`";
+    }
+
+    private static string BuildVoiceMoveContent(string prefix)
+    {
+        return
+            "## Voice — Move, Kick & Pull\n\n" +
+            $"`{prefix}vcmove`, `{prefix}vcmoveall`, `{prefix}vckick`, `{prefix}vckickall`, `{prefix}vcpull`, `{prefix}vcpullall`";
+    }
+
+    private static string BuildVoiceChannelContent(string prefix)
+    {
+        return
+            "## Voice — Channel & Info\n\n" +
+            $"`{prefix}vclock`, `{prefix}vcunlock`, `{prefix}vchide`, `{prefix}vcunhide`, `{prefix}vclist`";
+    }
+
+    private static string BuildAutoResponderContent(string prefix)
+    {
+        return
+            "## Autoresponder\n\n" +
+            $"`{prefix}autoresponder add`, `{prefix}autoresponder edit`, `{prefix}autoresponder remove`, `{prefix}autoresponder list`\n\n" +
+            $"-# Set up automatic replies to trigger words and phrases • `{prefix}autoresponder add <trigger> <reply>`";
+    }
+
     private static string BuildUtilityContent(string prefix)
     {
         return
@@ -148,6 +215,8 @@ public sealed class HelpComponentBuilder
     {
         var homeValue = HelpComponentIds.ToValue(HelpCategory.Home);
         var autoModValue = HelpComponentIds.ToValue(HelpCategory.AutoMod);
+        var autoRoleValue = HelpComponentIds.ToValue(HelpCategory.AutoRole);
+        var voiceValue = HelpComponentIds.ToValue(HelpCategory.Voice);
         var utilityValue = HelpComponentIds.ToValue(HelpCategory.Utility);
         var moderationValue = HelpComponentIds.ToValue(HelpCategory.Moderation);
 
@@ -166,6 +235,16 @@ public sealed class HelpComponentBuilder
                 autoModValue,
                 "Automatic moderation rules",
                 isDefault: selectedCategory == HelpCategory.AutoMod)
+            .AddOption(
+                "AutoRole",
+                autoRoleValue,
+                "Assign roles on join and in voice",
+                isDefault: selectedCategory == HelpCategory.AutoRole)
+            .AddOption(
+                "Voice",
+                voiceValue,
+                "Voice channel moderation commands",
+                isDefault: selectedCategory == HelpCategory.Voice)
             .AddOption(
                 "Moderation",
                 moderationValue,

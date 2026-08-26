@@ -30,7 +30,7 @@ public sealed class AutoModComponentBuilder
             var emoji = ruleEnabled ? EnabledEmoji : DisabledEmoji;
             var action = config.GetAction(rule).ToDisplay();
 
-            rules.Add($"{emoji} **{rule.DisplayName()}** — `{action}`");
+            rules.Add($"> {emoji} **{rule.DisplayName()}** — `{action}`");
         }
 
         var bypass = config.BypassRoleIds.Count == 0
