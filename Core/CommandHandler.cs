@@ -70,6 +70,8 @@ public sealed class CommandHandler
     private readonly TicketComponentBuilder _ticketComponentBuilder;
     private readonly MediaConfigService _mediaConfigService;
     private readonly MediaService _mediaService;
+    private readonly GiveawayService _giveawayService;
+    private readonly GiveawayComponentBuilder _giveawayComponentBuilder;
 
     public CommandHandler(
         DiscordSocketClient client,
@@ -123,7 +125,9 @@ public sealed class CommandHandler
         TicketService ticketService,
         TicketComponentBuilder ticketComponentBuilder,
         MediaConfigService mediaConfigService,
-        MediaService mediaService)
+        MediaService mediaService,
+        GiveawayService giveawayService,
+        GiveawayComponentBuilder giveawayComponentBuilder)
     {
         _client = client;
         _commands = commands;
@@ -177,6 +181,8 @@ public sealed class CommandHandler
         _ticketComponentBuilder = ticketComponentBuilder;
         _mediaConfigService = mediaConfigService;
         _mediaService = mediaService;
+        _giveawayService = giveawayService;
+        _giveawayComponentBuilder = giveawayComponentBuilder;
     }
 
     public async Task InitializeAsync()
@@ -197,6 +203,7 @@ public sealed class CommandHandler
         await _ticketConfigService.LoadAsync();
         await _ticketService.LoadAsync();
         await _mediaConfigService.LoadAsync();
+        await _giveawayService.LoadAsync();
 
         _client.MessageReceived += HandleMessageAsync;
         _client.MessageDeleted += HandleMessageDeletedAsync;
@@ -540,7 +547,10 @@ public sealed class CommandHandler
     {
         var botName = _client.CurrentUser.Username;
         var botAvatarUrl = _client.CurrentUser.GetDisplayAvatarUrl(size: 256);
-        var commandCount = _commands.Commands.Count();
+        // Hidden commands stay out of the count, otherwise this card and the help
+        // menu would report different totals.
+        var commandCount = _commands.Commands.Count(
+            command => command.Remarks != HelpComponentBuilder.HiddenCommandRemark);
         var guildId = (message.Channel as SocketGuildChannel)?.Guild.Id;
 
         return message.Channel.SendMessageAsync(
@@ -720,6 +730,22 @@ public sealed class CommandHandler
             return;
         }
 
+        if (GiveawayComponentIds.TryParse(
+                component.Data.CustomId,
+                out var giveawayAction,
+                out var giveawayMessageId,
+                out var giveawayPage,
+                out var giveawayRequesterId))
+        {
+            await HandleGiveawayButtonAsync(
+                component,
+                giveawayAction,
+                giveawayMessageId,
+                giveawayPage,
+                giveawayRequesterId);
+            return;
+        }
+
         if (!StatsComponentIds.TryParse(
                 component.Data.CustomId,
                 out var tab,
@@ -802,6 +828,101 @@ public sealed class CommandHandler
             properties.Components = _levelComponentBuilder.BuildLeaderboard(
                 track,
                 ranked,
+                guild,
+                page,
+                requesterId);
+        });
+    }
+
+    /// <summary>
+    /// Routes the giveaway buttons. Enter is open to every member, so its id carries
+    /// no requester id and the live state is rechecked here instead; the entry pages
+    /// stay locked to whoever ran the command.
+    /// </summary>
+    private async Task HandleGiveawayButtonAsync(
+        SocketMessageComponent component,
+        GiveawayAction action,
+        ulong messageId,
+        int page,
+        ulong requesterId)
+    {
+        try
+        {
+            if (action == GiveawayAction.Entries)
+            {
+                await HandleGiveawayEntriesButtonAsync(
+                    component,
+                    messageId,
+                    page,
+                    requesterId);
+
+                return;
+            }
+
+            if (component.User is not SocketGuildUser member)
+            {
+                await component.RespondAsync(
+                    "Giveaways can only be entered from inside the server.",
+                    ephemeral: true);
+
+                return;
+            }
+
+            var outcome = await _giveawayService.ToggleEntryAsync(messageId, member);
+
+            // The card's entry count is refreshed in batches by the giveaway ticker,
+            // so this ephemeral reply is what makes the click feel immediate.
+            await component.RespondAsync(
+                outcome.Result switch
+                {
+                    GiveawayEntryResult.Done when outcome.Joined =>
+                        $"🎉 You have entered this giveaway — `{outcome.EntryCount}` " +
+                        "entry(s) so far. Press the button again to leave.",
+                    GiveawayEntryResult.Done =>
+                        $"You have left this giveaway — `{outcome.EntryCount}` " +
+                        "entry(s) left.",
+                    GiveawayEntryResult.Ended =>
+                        "This giveaway has already ended.",
+                    _ => "This giveaway is no longer being tracked."
+                },
+                ephemeral: true);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[Giveaway Button Error] {exception.Message}");
+        }
+    }
+
+    private async Task HandleGiveawayEntriesButtonAsync(
+        SocketMessageComponent component,
+        ulong messageId,
+        int page,
+        ulong requesterId)
+    {
+        if (component.User.Id != requesterId)
+        {
+            await component.RespondAsync(
+                "Only the user who opened this entry list can control it.",
+                ephemeral: true);
+            return;
+        }
+
+        if (_giveawayService.GetGiveaway(messageId) is not { } giveaway ||
+            _client.GetGuild(giveaway.GuildId) is not { } guild)
+        {
+            await component.RespondAsync(
+                "This giveaway is no longer available.",
+                ephemeral: true);
+            return;
+        }
+
+        // Entries are read fresh on every flip, so a page shows who is in right now
+        // rather than who was in when the command ran.
+        await component.UpdateAsync(properties =>
+        {
+            properties.AllowedMentions = AllowedMentions.None;
+            properties.Components = _giveawayComponentBuilder.BuildEntries(
+                giveaway,
                 guild,
                 page,
                 requesterId);

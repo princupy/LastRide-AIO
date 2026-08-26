@@ -4,7 +4,14 @@ namespace LastRide.Builders;
 
 public sealed class HelpComponentBuilder
 {
-    private const int TotalCommandCount = 119;
+    private const int TotalCommandCount = 124;
+
+    /// <summary>
+    /// Marker for commands that must not be listed or counted anywhere. Set through
+    /// <c>[Remarks]</c> on the command itself.
+    /// </summary>
+    public const string HiddenCommandRemark = "hidden";
+
     private static readonly Color AccentColor = new(8, 4, 4);
 
     public MessageComponent Build(
@@ -142,6 +149,14 @@ public sealed class HelpComponentBuilder
             components.Add(Divider());
             components.Add(new TextDisplayBuilder(BuildMediaForwardContent(prefix)));
         }
+        else if (selectedCategory == HelpCategory.Giveaway)
+        {
+            // Giveaway page splits by audience: the commands that need Manage
+            // Server, then the two anyone can run.
+            components.Add(new TextDisplayBuilder(BuildGiveawayHostContent(prefix)));
+            components.Add(Divider());
+            components.Add(new TextDisplayBuilder(BuildGiveawayInfoContent(prefix)));
+        }
         else
         {
             components.Add(new TextDisplayBuilder(BuildCategoryContent(
@@ -177,6 +192,7 @@ public sealed class HelpComponentBuilder
             HelpCategory.Welcome => BuildWelcomeSetupContent(prefix),
             HelpCategory.Ticket => BuildTicketSetupContent(prefix),
             HelpCategory.Media => BuildMediaChannelsContent(prefix),
+            HelpCategory.Giveaway => BuildGiveawayHostContent(prefix),
             HelpCategory.Logs => BuildLogsContent(prefix),
             HelpCategory.Utility => BuildUtilityContent(prefix),
             HelpCategory.Moderation => BuildModerationContent(prefix),
@@ -350,6 +366,32 @@ public sealed class HelpComponentBuilder
             "there too • needs `Manage Server` or `Administrator`";
     }
 
+    private static string BuildGiveawayHostContent(string prefix)
+    {
+        return
+            "## Giveaway — Hosting\n\n" +
+            $"`{prefix}gstart`, `{prefix}gend`, `{prefix}greroll`\n\n" +
+            $"-# `{prefix}gstart <duration> [winners]w <prize>` • e.g. " +
+            $"`{prefix}gstart 1h Nitro` or `{prefix}gstart 12h 3w Nitro Classic`\n" +
+            $"-# `{prefix}gend` ends one early and draws now • `{prefix}greroll` " +
+            "draws again and never repeats an earlier winner\n" +
+            $"-# ID optional when only one giveaway fits • needs `Manage Server` " +
+            "or `Administrator`";
+    }
+
+    private static string BuildGiveawayInfoContent(string prefix)
+    {
+        return
+            "## Giveaway — Info\n\n" +
+            $"`{prefix}glist`, `{prefix}gentries`\n\n" +
+            "-# Members join by pressing the 🎉 Enter button on the card, and " +
+            "pressing it again leaves\n" +
+            $"-# `{prefix}glist` shows every running giveaway with jump links and " +
+            $"IDs • `{prefix}gentries` pages through who entered\n" +
+            "-# Both are open to everyone • giveaways survive a restart and end on " +
+            "time by themselves";
+    }
+
     private static string BuildLogsContent(string prefix)
     {
         return
@@ -392,6 +434,7 @@ public sealed class HelpComponentBuilder
         var welcomeValue = HelpComponentIds.ToValue(HelpCategory.Welcome);
         var ticketValue = HelpComponentIds.ToValue(HelpCategory.Ticket);
         var mediaValue = HelpComponentIds.ToValue(HelpCategory.Media);
+        var giveawayValue = HelpComponentIds.ToValue(HelpCategory.Giveaway);
         var logsValue = HelpComponentIds.ToValue(HelpCategory.Logs);
         var utilityValue = HelpComponentIds.ToValue(HelpCategory.Utility);
         var moderationValue = HelpComponentIds.ToValue(HelpCategory.Moderation);
@@ -446,6 +489,11 @@ public sealed class HelpComponentBuilder
                 mediaValue,
                 "Media-only channels & forwarding",
                 isDefault: selectedCategory == HelpCategory.Media)
+            .AddOption(
+                "Giveaway",
+                giveawayValue,
+                "Host giveaways with entry buttons",
+                isDefault: selectedCategory == HelpCategory.Giveaway)
             .AddOption(
                 "Logs",
                 logsValue,

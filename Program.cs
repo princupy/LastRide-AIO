@@ -140,6 +140,8 @@ await using var services = new ServiceCollection()
     .AddSingleton<MediaConfigService>()
     .AddSingleton<MediaComponentBuilder>()
     .AddSingleton<MediaService>()
+    .AddSingleton<GiveawayComponentBuilder>()
+    .AddSingleton<GiveawayService>()
     .BuildServiceProvider();
 
 await services
