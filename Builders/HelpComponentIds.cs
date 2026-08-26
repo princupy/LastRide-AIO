@@ -6,6 +6,11 @@ public enum HelpCategory
     AutoMod,
     AutoRole,
     Voice,
+    Leveling,
+    SetupRoles,
+    Welcome,
+    Ticket,
+    Media,
     Logs,
     Utility,
     Moderation
@@ -47,13 +52,18 @@ public static class HelpComponentIds
             "automod" => HelpCategory.AutoMod,
             "autorole" => HelpCategory.AutoRole,
             "voice" => HelpCategory.Voice,
+            "leveling" => HelpCategory.Leveling,
+            "setuproles" => HelpCategory.SetupRoles,
+            "welcome" => HelpCategory.Welcome,
+            "ticket" => HelpCategory.Ticket,
+            "media" => HelpCategory.Media,
             "logs" => HelpCategory.Logs,
             "utility" => HelpCategory.Utility,
             "moderation" => HelpCategory.Moderation,
             _ => HelpCategory.Utility
         };
 
-        return value is "home" or "automod" or "autorole" or "voice" or "logs" or "utility" or "moderation";
+        return value is "home" or "automod" or "autorole" or "voice" or "leveling" or "setuproles" or "welcome" or "ticket" or "media" or "logs" or "utility" or "moderation";
     }
 
     public static string ToValue(HelpCategory category)
@@ -64,6 +74,11 @@ public static class HelpComponentIds
             HelpCategory.AutoMod => "automod",
             HelpCategory.AutoRole => "autorole",
             HelpCategory.Voice => "voice",
+            HelpCategory.Leveling => "leveling",
+            HelpCategory.SetupRoles => "setuproles",
+            HelpCategory.Welcome => "welcome",
+            HelpCategory.Ticket => "ticket",
+            HelpCategory.Media => "media",
             HelpCategory.Logs => "logs",
             HelpCategory.Utility => "utility",
             HelpCategory.Moderation => "moderation",

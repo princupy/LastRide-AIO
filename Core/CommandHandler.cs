@@ -58,6 +58,18 @@ public sealed class CommandHandler
     private readonly LogConfigService _logConfigService;
     private readonly LogService _logService;
     private readonly LogComponentBuilder _logComponentBuilder;
+    private readonly LevelConfigService _levelConfigService;
+    private readonly LevelService _levelService;
+    private readonly LevelComponentBuilder _levelComponentBuilder;
+    private readonly SetupRoleConfigService _setupRoleConfigService;
+    private readonly SetupRoleService _setupRoleService;
+    private readonly WelcomeConfigService _welcomeConfigService;
+    private readonly WelcomeService _welcomeService;
+    private readonly TicketConfigService _ticketConfigService;
+    private readonly TicketService _ticketService;
+    private readonly TicketComponentBuilder _ticketComponentBuilder;
+    private readonly MediaConfigService _mediaConfigService;
+    private readonly MediaService _mediaService;
 
     public CommandHandler(
         DiscordSocketClient client,
@@ -99,7 +111,19 @@ public sealed class CommandHandler
         VoiceComponentBuilder voiceComponentBuilder,
         LogConfigService logConfigService,
         LogService logService,
-        LogComponentBuilder logComponentBuilder)
+        LogComponentBuilder logComponentBuilder,
+        LevelConfigService levelConfigService,
+        LevelService levelService,
+        LevelComponentBuilder levelComponentBuilder,
+        SetupRoleConfigService setupRoleConfigService,
+        SetupRoleService setupRoleService,
+        WelcomeConfigService welcomeConfigService,
+        WelcomeService welcomeService,
+        TicketConfigService ticketConfigService,
+        TicketService ticketService,
+        TicketComponentBuilder ticketComponentBuilder,
+        MediaConfigService mediaConfigService,
+        MediaService mediaService)
     {
         _client = client;
         _commands = commands;
@@ -141,6 +165,18 @@ public sealed class CommandHandler
         _logConfigService = logConfigService;
         _logService = logService;
         _logComponentBuilder = logComponentBuilder;
+        _levelConfigService = levelConfigService;
+        _levelService = levelService;
+        _levelComponentBuilder = levelComponentBuilder;
+        _setupRoleConfigService = setupRoleConfigService;
+        _setupRoleService = setupRoleService;
+        _welcomeConfigService = welcomeConfigService;
+        _welcomeService = welcomeService;
+        _ticketConfigService = ticketConfigService;
+        _ticketService = ticketService;
+        _ticketComponentBuilder = ticketComponentBuilder;
+        _mediaConfigService = mediaConfigService;
+        _mediaService = mediaService;
     }
 
     public async Task InitializeAsync()
@@ -154,10 +190,23 @@ public sealed class CommandHandler
         await _autoRoleConfigService.LoadAsync();
         await _autoResponderConfigService.LoadAsync();
         await _logConfigService.LoadAsync();
+        await _levelConfigService.LoadAsync();
+        await _levelService.LoadAsync();
+        await _setupRoleConfigService.LoadAsync();
+        await _welcomeConfigService.LoadAsync();
+        await _ticketConfigService.LoadAsync();
+        await _ticketService.LoadAsync();
+        await _mediaConfigService.LoadAsync();
 
         _client.MessageReceived += HandleMessageAsync;
         _client.MessageDeleted += HandleMessageDeletedAsync;
-        _client.ButtonExecuted += HandleButtonAsync;
+        // Fire-and-forget: ticket buttons create channels and read message
+        // history (several HTTP calls), which must not block the gateway task.
+        _client.ButtonExecuted += component =>
+        {
+            _ = HandleButtonAsync(component);
+            return Task.CompletedTask;
+        };
         // Fire-and-forget: the log-setup menu creates channels (several HTTP
         // calls), which must not block the gateway task.
         _client.SelectMenuExecuted += component =>
@@ -166,6 +215,9 @@ public sealed class CommandHandler
             return Task.CompletedTask;
         };
         _client.UserJoined += _autoRoleService.HandleUserJoinedAsync;
+        // Runs after the auto-role handler so the greeting lands once the new
+        // member already holds their join roles.
+        _client.UserJoined += _welcomeService.HandleUserJoinedAsync;
         _client.UserVoiceStateUpdated += _autoRoleService.HandleVoiceStateUpdatedAsync;
 
         // Logging service — fire-and-forget so slow audit-log lookups (1.2s
@@ -225,6 +277,9 @@ public sealed class CommandHandler
         _client.ChannelDestroyed += channel =>
         {
             _ = _logService.HandleChannelDestroyedAsync(channel);
+            // Drops the record for a ticket channel deleted outside the bot, so
+            // the opener's allowance frees up again.
+            _ = _ticketService.HandleChannelDestroyedAsync(channel);
             return Task.CompletedTask;
         };
         _client.ChannelUpdated += (before, after) =>
@@ -245,6 +300,14 @@ public sealed class CommandHandler
         _client.RoleUpdated += (before, after) =>
         {
             _ = _logService.HandleRoleUpdatedAsync(before, after);
+            return Task.CompletedTask;
+        };
+
+        // Voice XP — detached like the log handlers; the service self-gates on
+        // the guild's leveling config and catches its own errors.
+        _client.UserVoiceStateUpdated += (user, before, after) =>
+        {
+            _ = _levelService.HandleVoiceStateUpdatedAsync(user, before, after);
             return Task.CompletedTask;
         };
     }
@@ -344,6 +407,11 @@ public sealed class CommandHandler
         if (await _autoModService.ScanAsync(message))
             return;
 
+        // Media-only channels drop everything without an attachment, sticker or
+        // link — commands included — so this runs before the prefix is parsed.
+        if (await _mediaService.ScanAsync(message))
+            return;
+
         var argumentPosition = 0;
         var guildId = (message.Channel as SocketGuildChannel)?.Guild.Id;
         var prefix = _prefixService.GetPrefix(guildId);
@@ -369,7 +437,9 @@ public sealed class CommandHandler
 
         if (!hasPrefix)
         {
-            // Not a command — let the autoresponder look for a trigger match.
+            // Not a command — award chat XP and let the autoresponder look for a
+            // trigger match. XP is detached so a Mongo write never delays the reply.
+            _ = _levelService.HandleTextMessageAsync(message);
             await _autoResponderService.HandleMessageAsync(message);
             return;
         }
@@ -381,9 +451,19 @@ public sealed class CommandHandler
             argumentPosition,
             _services);
 
-        if (result.IsSuccess ||
-            result.Error is CommandError.UnknownCommand)
+        if (result.IsSuccess)
+            return;
+
+        if (result.Error is CommandError.UnknownCommand)
         {
+            // The command service only knows the commands declared at compile
+            // time, so an unknown name may still be one of this guild's dynamic
+            // role commands created with `setuprolecreate`.
+            await _setupRoleService.TryHandleCommandAsync(
+                message,
+                commandName,
+                argumentPosition);
+
             return;
         }
 
@@ -615,6 +695,31 @@ public sealed class CommandHandler
             return;
         }
 
+        if (LevelComponentIds.TryParse(
+                component.Data.CustomId,
+                out var levelBoard,
+                out var levelPage,
+                out var levelRequesterId,
+                out var levelGuildId))
+        {
+            await HandleLeaderboardButtonAsync(
+                component,
+                levelBoard,
+                levelPage,
+                levelRequesterId,
+                levelGuildId);
+            return;
+        }
+
+        if (TicketComponentIds.TryParse(
+                component.Data.CustomId,
+                out var ticketAction,
+                out var ticketTarget))
+        {
+            await HandleTicketButtonAsync(component, ticketAction, ticketTarget);
+            return;
+        }
+
         if (!StatsComponentIds.TryParse(
                 component.Data.CustomId,
                 out var tab,
@@ -659,6 +764,240 @@ public sealed class CommandHandler
                     ephemeral: true);
             }
         }
+    }
+
+    private async Task HandleLeaderboardButtonAsync(
+        SocketMessageComponent component,
+        LevelBoard track,
+        int page,
+        ulong requesterId,
+        ulong guildId)
+    {
+        if (component.User.Id != requesterId)
+        {
+            await component.RespondAsync(
+                "Only the user who opened this leaderboard can control it.",
+                ephemeral: true);
+            return;
+        }
+
+        var guild = _client.GetGuild(guildId);
+
+        if (guild is null)
+        {
+            await component.RespondAsync(
+                "This leaderboard is no longer available.",
+                ephemeral: true);
+            return;
+        }
+
+        // The XP cache is live, so every page flip re-sorts current standings.
+        var ranked = track == LevelBoard.Voice
+            ? _levelService.GetVoiceLeaderboard(guildId)
+            : _levelService.GetTextLeaderboard(guildId);
+
+        await component.UpdateAsync(properties =>
+        {
+            properties.AllowedMentions = AllowedMentions.None;
+            properties.Components = _levelComponentBuilder.BuildLeaderboard(
+                track,
+                ranked,
+                guild,
+                page,
+                requesterId);
+        });
+    }
+
+    /// <summary>
+    /// Routes the ticket panel and in-ticket buttons. The create button is open to
+    /// every member, so its id carries no requester id; access for the staff
+    /// actions is checked inside the service against the guild's support roles.
+    /// </summary>
+    private async Task HandleTicketButtonAsync(
+        SocketMessageComponent component,
+        TicketAction action,
+        ulong targetId)
+    {
+        try
+        {
+            if (action == TicketAction.New)
+            {
+                await HandleTicketCreateButtonAsync(component, targetId);
+                return;
+            }
+
+            if (component.User is not SocketGuildUser member ||
+                member.Guild.GetTextChannel(targetId) is not { } channel)
+            {
+                await component.RespondAsync(
+                    "This ticket is no longer available.",
+                    ephemeral: true);
+
+                return;
+            }
+
+            // Delete destroys the channel this interaction lives in, so it has to
+            // answer first — afterwards there is nowhere left to reply.
+            if (action == TicketAction.Delete)
+            {
+                await component.RespondAsync("Deleting this ticket…", ephemeral: true);
+
+                var deleted = await _ticketService.DeleteAsync(member, channel);
+
+                if (deleted.Result != TicketActionResult.Done)
+                {
+                    await component.FollowupAsync(
+                        DescribeTicketFailure(deleted.Result),
+                        ephemeral: true);
+                }
+
+                return;
+            }
+
+            await component.DeferAsync();
+
+            var outcome = action switch
+            {
+                TicketAction.Close =>
+                    await _ticketService.CloseAsync(member, channel, reason: null),
+                TicketAction.Claim =>
+                    await _ticketService.SetClaimAsync(member, channel, claim: true),
+                TicketAction.Unclaim =>
+                    await _ticketService.SetClaimAsync(member, channel, claim: false),
+                TicketAction.Reopen =>
+                    await _ticketService.ReopenAsync(member, channel),
+                _ => await _ticketService.SaveTranscriptAsync(member, channel)
+            };
+
+            if (outcome.Result != TicketActionResult.Done)
+            {
+                await component.FollowupAsync(
+                    DescribeTicketFailure(outcome.Result),
+                    ephemeral: true);
+
+                return;
+            }
+
+            // Close and Transcript already post their own card, so only claim,
+            // unclaim, and reopen need a visible note for the rest of the staff.
+            switch (action)
+            {
+                case TicketAction.Claim:
+                    await channel.SendMessageAsync(
+                        allowedMentions: AllowedMentions.None,
+                        components: _ticketComponentBuilder.BuildActionCard(
+                            "Ticket Claimed",
+                            $"{member.Mention} is handling this ticket."));
+                    break;
+
+                case TicketAction.Unclaim:
+                    await channel.SendMessageAsync(
+                        allowedMentions: AllowedMentions.None,
+                        components: _ticketComponentBuilder.BuildActionCard(
+                            "Ticket Released",
+                            "This ticket is unclaimed again — any staff member can " +
+                            "take it."));
+                    break;
+
+                case TicketAction.Reopen:
+                    await channel.SendMessageAsync(
+                        allowedMentions: AllowedMentions.None,
+                        components: _ticketComponentBuilder.BuildActionCard(
+                            "Ticket Reopened",
+                            $"**Reopened by:** {member.Mention}",
+                            "The member who opened it can see and post here again."));
+                    break;
+            }
+
+            await component.FollowupAsync(
+                action switch
+                {
+                    TicketAction.Close => "Ticket closed.",
+                    TicketAction.Claim => "You claimed this ticket.",
+                    TicketAction.Unclaim => "You released this ticket.",
+                    TicketAction.Reopen => "Ticket reopened.",
+                    _ => "Transcript saved to the ticket log channel."
+                },
+                ephemeral: true);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"[Ticket Button Error] {exception.Message}");
+        }
+    }
+
+    private async Task HandleTicketCreateButtonAsync(
+        SocketMessageComponent component,
+        ulong guildId)
+    {
+        // Creating a channel is several HTTP calls, well past the three-second
+        // interaction window, so the click is acknowledged first.
+        await component.DeferAsync();
+
+        if (component.User is not SocketGuildUser member || member.Guild.Id != guildId)
+        {
+            await component.FollowupAsync(
+                "This panel belongs to another server.",
+                ephemeral: true);
+
+            return;
+        }
+
+        var outcome = await _ticketService.OpenAsync(member, reason: null);
+
+        var message = outcome.Result switch
+        {
+            TicketOpenResult.Opened =>
+                $"Your ticket is open: <#{outcome.ChannelId}>",
+
+            TicketOpenResult.Disabled =>
+                "The ticket system is switched off in this server.",
+
+            TicketOpenResult.CategoryMissing =>
+                "Tickets are not set up yet — ask an admin to run the ticket setup.",
+
+            TicketOpenResult.MissingBotPermission =>
+                "I need `Manage Channels` or `Administrator` to create ticket " +
+                "channels.",
+
+            TicketOpenResult.LimitReached =>
+                $"You already have `{outcome.Limit}` ticket(s) open — yours is " +
+                $"<#{outcome.ChannelId}>.",
+
+            _ => "Creating your ticket failed. Please try again in a moment."
+        };
+
+        await component.FollowupAsync(
+            message,
+            ephemeral: true,
+            allowedMentions: AllowedMentions.None);
+    }
+
+    private static string DescribeTicketFailure(TicketActionResult result)
+    {
+        return result switch
+        {
+            TicketActionResult.NotATicket => "This channel is not a ticket.",
+
+            TicketActionResult.MissingAccess =>
+                "You need a ticket support role, `Manage Channels`, or " +
+                "`Administrator` for that.",
+
+            TicketActionResult.AlreadyClosed => "This ticket is already closed.",
+
+            TicketActionResult.NotClosed => "This ticket is not closed.",
+
+            TicketActionResult.AlreadyClaimed => "This ticket is already claimed.",
+
+            TicketActionResult.NotClaimed => "Nobody has claimed this ticket yet.",
+
+            TicketActionResult.NoLogChannel =>
+                "No ticket log channel is set, so there is nowhere to send the " +
+                "transcript.",
+
+            _ => "Something went wrong — check that I still have `Manage Channels` " +
+                 "here."
+        };
     }
 
     private async Task HandleUnbanButtonAsync(
