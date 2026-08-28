@@ -1,11 +1,15 @@
 using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
+using Lavalink4NET.Extensions;
+using Lavalink4NET.InactivityTracking.Extensions;
 using LastRide.Builders;
 using LastRide.Configuration;
 using LastRide.Core;
 using LastRide.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Logging;
 
 const string defaultPrefix = "?";
 
@@ -142,6 +146,55 @@ await using var services = new ServiceCollection()
     .AddSingleton<MediaService>()
     .AddSingleton<GiveawayComponentBuilder>()
     .AddSingleton<GiveawayService>()
+    .AddSingleton<NoPrefixComponentBuilder>()
+    .AddSingleton<NoPrefixService>()
+    .AddSingleton<CommandAccessService>()
+    // Lavalink4NET writes through Microsoft.Extensions.Logging, which the bot does
+    // not otherwise use. Clearing the providers and adding only the bot's own console
+    // writer keeps the audio stack from printing framework-shaped lines, and the
+    // Warning floor means a healthy node is completely silent.
+    .AddLogging(logging => logging
+        .ClearProviders()
+        .AddProvider(new LavalinkConsoleLoggerProvider())
+        .SetMinimumLevel(LogLevel.Warning)
+        .AddFilter("System.Net.Http.HttpClient", LogLevel.None))
+    // One node, the TLS endpoint. The operator publishes a plaintext port as well, but
+    // it is the same physical server behind a second front door — running both meant a
+    // cluster whose round-robin balancer sent every other request to a node that was
+    // still connecting, so a single node is both simpler and steadier here.
+    .AddLavalink()
+    .ConfigureLavalink(options =>
+    {
+        options.BaseAddress = LavalinkSettings.BaseAddress;
+        options.Passphrase = LavalinkSettings.Passphrase;
+    })
+    // Lavalink4NET's Discord.Net wrapper never observed the bot's own VOICE_STATE_UPDATE,
+    // so it sent the node a blank session id and no channel id and every connect came
+    // back as a bare 400. This tracker reads that gateway event itself and the handler
+    // below completes the outgoing request from it.
+    .AddSingleton<VoiceSessionTracker>()
+    // Lavalink4NET does not put a channelId on the voice object it sends, and the node
+    // rejects an update without one (bare 400), so the bot could connect and search but
+    // never start a track. This handler fills the field in on the way out; it is scoped
+    // to the audio stack's own HTTP client so no other request is touched.
+    .AddTransient<LavalinkVoicePatchHandler>()
+    .ConfigureAll<HttpClientFactoryOptions>(http =>
+        http.HttpMessageHandlerBuilderActions.Add(builder =>
+            builder.AdditionalHandlers.Add(
+                builder.Services.GetRequiredService<LavalinkVoicePatchHandler>())))
+    // The default trackers cover both "the voice channel is empty" and "nothing is
+    // playing"; leaving the behaviour at its default destroys the idle player, which
+    // is what makes the bot leave rather than sit in the channel.
+    .AddInactivityTracking()
+    .ConfigureInactivityTracking(tracking =>
+    {
+        // Read from the service so the countdown printed on the queue-finished card and
+        // the disconnect that follows it can never drift apart.
+        tracking.DefaultTimeout = MusicService.InactivityTimeout;
+        tracking.DefaultPollInterval = TimeSpan.FromSeconds(15);
+    })
+    .AddSingleton<MusicComponentBuilder>()
+    .AddSingleton<MusicService>()
     .BuildServiceProvider();
 
 await services

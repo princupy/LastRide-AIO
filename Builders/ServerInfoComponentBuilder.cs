@@ -5,7 +5,7 @@ namespace LastRide.Builders;
 
 public sealed class ServerInfoComponentBuilder
 {
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent Build(
         SocketGuild guild,
@@ -273,8 +273,6 @@ public sealed class ServerInfoComponentBuilder
             values.Add("Text in Voice");
         if (features.HasRoleIcons)
             values.Add("Role Icons");
-        if (features.HasEnhancedRoleColors)
-            values.Add("Enhanced Role Colors");
         if (features.HasRoleSubscriptions)
             values.Add("Role Subscriptions");
 

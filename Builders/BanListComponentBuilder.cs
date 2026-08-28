@@ -8,7 +8,7 @@ public sealed class BanListComponentBuilder
 {
     private const int MaxNameLength = 22;
     private const int MaxReasonLength = 120;
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent Build(
         IReadOnlyList<BannedUser> bans,

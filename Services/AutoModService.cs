@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Discord;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Models;
 
 namespace LastRide.Services;
@@ -98,7 +99,7 @@ public sealed partial class AutoModService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoMod Scan Error] {exception}");
+            Console.WriteLine($"[AutoMod Scan Error] {DiscordFailure.Format(exception)}");
             return false;
         }
     }
@@ -368,7 +369,7 @@ public sealed partial class AutoModService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoMod Notice Error] {exception.Message}");
+            Console.WriteLine($"[AutoMod Notice Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -402,7 +403,7 @@ public sealed partial class AutoModService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoMod Log Error] {exception.Message}");
+            Console.WriteLine($"[AutoMod Log Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -414,7 +415,7 @@ public sealed partial class AutoModService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoMod Delete Error] {exception.Message}");
+            Console.WriteLine($"[AutoMod Delete Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -428,7 +429,7 @@ public sealed partial class AutoModService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoMod Mute Error] {exception.Message}");
+            Console.WriteLine($"[AutoMod Mute Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -440,7 +441,7 @@ public sealed partial class AutoModService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoMod Kick Error] {exception.Message}");
+            Console.WriteLine($"[AutoMod Kick Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -455,7 +456,7 @@ public sealed partial class AutoModService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoMod Ban Error] {exception.Message}");
+            Console.WriteLine($"[AutoMod Ban Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 

@@ -6,7 +6,7 @@ namespace LastRide.Builders;
 
 public sealed class StatsComponentBuilder
 {
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent BuildGeneral(
         BotStatsSnapshot stats,

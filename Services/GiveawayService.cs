@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Discord;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Models;
 using MongoDB.Driver;
 
@@ -169,7 +170,7 @@ public sealed class GiveawayService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Giveaway Post Error] {exception.Message}");
+            Console.WriteLine($"[Giveaway Post Error] {DiscordFailure.Summarize(exception)}");
 
             return new GiveawayStartOutcome(
                 GiveawayStartResult.PostFailed,
@@ -201,7 +202,7 @@ public sealed class GiveawayService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Giveaway Refresh Error] {exception.Message}");
+            Console.WriteLine($"[Giveaway Refresh Error] {DiscordFailure.Summarize(exception)}");
         }
 
         return new GiveawayStartOutcome(
@@ -370,7 +371,7 @@ public sealed class GiveawayService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Giveaway Announce Error] {exception.Message}");
+            Console.WriteLine($"[Giveaway Announce Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -395,7 +396,7 @@ public sealed class GiveawayService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Giveaway Refresh Error] {exception.Message}");
+            Console.WriteLine($"[Giveaway Refresh Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -433,7 +434,7 @@ public sealed class GiveawayService
             }
             catch (Exception exception)
             {
-                Console.WriteLine($"[Giveaway Tick Error] {exception}");
+                Console.WriteLine($"[Giveaway Tick Error] {DiscordFailure.Format(exception)}");
             }
         }
     }

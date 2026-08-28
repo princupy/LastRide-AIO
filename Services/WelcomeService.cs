@@ -1,6 +1,7 @@
 using Discord;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Services;
 
@@ -48,7 +49,7 @@ public sealed class WelcomeService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Welcome Join Error] {exception}");
+            Console.WriteLine($"[Welcome Join Error] {DiscordFailure.Format(exception)}");
         }
     }
 
@@ -103,7 +104,7 @@ public sealed class WelcomeService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Welcome Send Error] {exception.Message}");
+            Console.WriteLine($"[Welcome Send Error] {DiscordFailure.Summarize(exception)}");
             return false;
         }
     }

@@ -3,6 +3,7 @@ using System.Text;
 using Discord;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Models;
 using MongoDB.Driver;
 
@@ -253,10 +254,12 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Open Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Open Error] {DiscordFailure.Summarize(exception)}");
 
             return new TicketOpenOutcome(
-                TicketOpenResult.CreateFailed,
+                DiscordFailure.IsTwoFactorRequired(exception)
+                    ? TicketOpenResult.TwoFactorRequired
+                    : TicketOpenResult.CreateFailed,
                 null,
                 number,
                 config.Limit);
@@ -311,8 +314,15 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Setup Error] {exception.Message}");
-            return new TicketSetupOutcome(TicketSetupResult.Failed, null, null, false);
+            Console.WriteLine($"[Ticket Setup Error] {DiscordFailure.Summarize(exception)}");
+
+            return new TicketSetupOutcome(
+                DiscordFailure.IsTwoFactorRequired(exception)
+                    ? TicketSetupResult.TwoFactorRequired
+                    : TicketSetupResult.Failed,
+                null,
+                null,
+                false);
         }
     }
 
@@ -377,7 +387,7 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Close Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Close Error] {DiscordFailure.Summarize(exception)}");
             return new TicketActionOutcome(TicketActionResult.Failed, existing, null);
         }
     }
@@ -425,7 +435,7 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Reopen Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Reopen Error] {DiscordFailure.Summarize(exception)}");
             return new TicketActionOutcome(TicketActionResult.Failed, existing, null);
         }
     }
@@ -454,7 +464,7 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Delete Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Delete Error] {DiscordFailure.Summarize(exception)}");
             return new TicketActionOutcome(TicketActionResult.Failed, ticket, null);
         }
     }
@@ -534,7 +544,7 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Member Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Member Error] {DiscordFailure.Summarize(exception)}");
             return new TicketActionOutcome(TicketActionResult.Failed, existing, null);
         }
     }
@@ -568,7 +578,7 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Rename Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Rename Error] {DiscordFailure.Summarize(exception)}");
             return new TicketActionOutcome(TicketActionResult.Failed, ticket, null);
         }
     }
@@ -615,7 +625,7 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Cleanup Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Cleanup Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -832,7 +842,7 @@ public sealed class TicketService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Transcript Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Transcript Error] {DiscordFailure.Summarize(exception)}");
             return false;
         }
     }
@@ -977,6 +987,12 @@ public enum TicketOpenResult
     CategoryMissing,
     MissingBotPermission,
     LimitReached,
+
+    /// <summary>
+    /// See <see cref="TicketSetupResult.TwoFactorRequired"/> — the same server-level gate,
+    /// reported separately so the member is not told to check permissions that are correct.
+    /// </summary>
+    TwoFactorRequired,
     CreateFailed
 }
 
@@ -1001,6 +1017,13 @@ public enum TicketSetupResult
 {
     Done,
     MissingBotPermission,
+
+    /// <summary>
+    /// The guild gates moderation behind 2FA and the bot owner's account has none. Kept
+    /// apart from <see cref="Failed"/> because it is the one failure here that no amount of
+    /// permission or channel-limit fiddling inside the server can clear.
+    /// </summary>
+    TwoFactorRequired,
     Failed
 }
 

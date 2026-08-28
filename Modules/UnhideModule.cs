@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -92,11 +93,13 @@ public sealed class UnhideModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Unhide Error] {exception}");
+            Console.WriteLine($"[Unhide Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Unhide Failed",
-                "I could not unhide this channel. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not unhide this channel. Check my permissions and role position."));
         }
     }
 

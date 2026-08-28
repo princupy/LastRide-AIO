@@ -4,15 +4,13 @@ namespace LastRide.Builders;
 
 public sealed class HelpComponentBuilder
 {
-    private const int TotalCommandCount = 124;
-
     /// <summary>
     /// Marker for commands that must not be listed or counted anywhere. Set through
     /// <c>[Remarks]</c> on the command itself.
     /// </summary>
     public const string HiddenCommandRemark = "hidden";
 
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent Build(
         ulong userId,
@@ -20,6 +18,8 @@ public sealed class HelpComponentBuilder
         string requesterMention,
         string botName,
         string botAvatarUrl,
+        int totalCommands,
+        int availableCommands,
         HelpCategory? selectedCategory = null)
     {
         if (selectedCategory is not null)
@@ -40,9 +40,12 @@ public sealed class HelpComponentBuilder
         var intro =
             $"Hey {requesterMention}, I'm {EscapeInlineCode(botName)}, your Discord companion.";
 
+        // The access figure is scanned per reader, so two members looking at the same
+        // menu see two different numbers — the second one is the full catalogue.
         var summary =
             $"> <:ArrowRight:1541407020257640470> **Server Prefix:** `{prefix}`\n" +
-            $"> <:ArrowRight:1541407020257640470> **Total Commands:** `{TotalCommandCount}`";
+            $"> <:ArrowRight:1541407020257640470> **Your Access:** " +
+            $"`{availableCommands}` / `{totalCommands}` commands";
 
         var section = new SectionBuilder()
             .WithAccessory(
@@ -149,6 +152,14 @@ public sealed class HelpComponentBuilder
             components.Add(Divider());
             components.Add(new TextDisplayBuilder(BuildMediaForwardContent(prefix)));
         }
+        else if (selectedCategory == HelpCategory.Music)
+        {
+            // Music page splits by what the command touches: the playback controls
+            // first, then everything that acts on the queue.
+            components.Add(new TextDisplayBuilder(BuildMusicPlaybackContent(prefix)));
+            components.Add(Divider());
+            components.Add(new TextDisplayBuilder(BuildMusicQueueContent(prefix)));
+        }
         else if (selectedCategory == HelpCategory.Giveaway)
         {
             // Giveaway page splits by audience: the commands that need Manage
@@ -192,6 +203,7 @@ public sealed class HelpComponentBuilder
             HelpCategory.Welcome => BuildWelcomeSetupContent(prefix),
             HelpCategory.Ticket => BuildTicketSetupContent(prefix),
             HelpCategory.Media => BuildMediaChannelsContent(prefix),
+            HelpCategory.Music => BuildMusicPlaybackContent(prefix),
             HelpCategory.Giveaway => BuildGiveawayHostContent(prefix),
             HelpCategory.Logs => BuildLogsContent(prefix),
             HelpCategory.Utility => BuildUtilityContent(prefix),
@@ -366,6 +378,23 @@ public sealed class HelpComponentBuilder
             "there too • needs `Manage Server` or `Administrator`";
     }
 
+    private static string BuildMusicPlaybackContent(string prefix)
+    {
+        return
+            "## Music — Playback\n\n" +
+            $"`{prefix}play`, `{prefix}pause`, `{prefix}resume`, `{prefix}skip`, " +
+            $"`{prefix}stop`, `{prefix}nowplaying`, `{prefix}volume`, `{prefix}seek`, " +
+            $"`{prefix}join`, `{prefix}leave`";
+    }
+
+    private static string BuildMusicQueueContent(string prefix)
+    {
+        return
+            "## Music — Queue\n\n" +
+            $"`{prefix}queue`, `{prefix}loop`, `{prefix}shuffle`, `{prefix}remove`, " +
+            $"`{prefix}clear`";
+    }
+
     private static string BuildGiveawayHostContent(string prefix)
     {
         return
@@ -434,6 +463,7 @@ public sealed class HelpComponentBuilder
         var welcomeValue = HelpComponentIds.ToValue(HelpCategory.Welcome);
         var ticketValue = HelpComponentIds.ToValue(HelpCategory.Ticket);
         var mediaValue = HelpComponentIds.ToValue(HelpCategory.Media);
+        var musicValue = HelpComponentIds.ToValue(HelpCategory.Music);
         var giveawayValue = HelpComponentIds.ToValue(HelpCategory.Giveaway);
         var logsValue = HelpComponentIds.ToValue(HelpCategory.Logs);
         var utilityValue = HelpComponentIds.ToValue(HelpCategory.Utility);
@@ -489,6 +519,11 @@ public sealed class HelpComponentBuilder
                 mediaValue,
                 "Media-only channels & forwarding",
                 isDefault: selectedCategory == HelpCategory.Media)
+            .AddOption(
+                "Music",
+                musicValue,
+                "Play music in voice channels",
+                isDefault: selectedCategory == HelpCategory.Music)
             .AddOption(
                 "Giveaway",
                 giveawayValue,

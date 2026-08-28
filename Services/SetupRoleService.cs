@@ -1,6 +1,7 @@
 using Discord;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Services;
 
@@ -113,7 +114,8 @@ public sealed class SetupRoleService
                 await ReplyNoticeAsync(
                     message,
                     "Member Not Found",
-                    "I could not find that member in this server.");
+                    "I could not find that member in this server. Mention them or use " +
+                    "their user ID.");
 
                 return true;
             }
@@ -146,13 +148,15 @@ public sealed class SetupRoleService
             }
             catch (Exception exception)
             {
-                Console.WriteLine($"[SetupRole Role Error] {exception}");
+                Console.WriteLine($"[SetupRole Role Error] {DiscordFailure.Format(exception)}");
 
                 await ReplyNoticeAsync(
                     message,
                     "Role Update Failed",
-                    "Discord rejected the role change. Check my permissions and " +
-                    "role position, then try again.");
+                    DiscordFailure.Describe(
+                        exception,
+                        "Discord rejected the role change. Check my permissions and " +
+                        "role position, then try again."));
 
                 return true;
             }
@@ -174,7 +178,7 @@ public sealed class SetupRoleService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[SetupRole Error] {exception}");
+            Console.WriteLine($"[SetupRole Error] {DiscordFailure.Format(exception)}");
             return false;
         }
     }
@@ -191,26 +195,14 @@ public sealed class SetupRoleService
             : commandText[(spaceIndex + 1)..].Trim();
     }
 
-    // Mirrors the member lookup used by the addrole command: mention or id
-    // first, then an exact name match, then a partial one.
+    // Mirrors the member lookup used by the addrole command: an explicit mention or id,
+    // nothing else. See UserReference for why name matching was dropped.
     private static SocketGuildUser? ResolveTarget(SocketGuild guild, string query)
     {
-        if (MentionUtils.TryParseUser(query, out var mentionedUserId) ||
-            ulong.TryParse(query, out mentionedUserId))
-        {
-            return guild.GetUser(mentionedUserId);
-        }
+        if (!UserReference.TryParse(query, out var userId))
+            return null;
 
-        var exactMatch = guild.Users.FirstOrDefault(candidate =>
-            candidate.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            candidate.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        if (exactMatch is not null)
-            return exactMatch;
-
-        return guild.Users.FirstOrDefault(candidate =>
-            candidate.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            candidate.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
+        return guild.GetUser(userId);
     }
 
     // The staff hierarchy check happens when the command is created — whoever

@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -92,11 +93,13 @@ public sealed class LockModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Lock Error] {exception}");
+            Console.WriteLine($"[Lock Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Lock Failed",
-                "I could not lock this channel. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not lock this channel. Check my permissions and role position."));
         }
     }
 

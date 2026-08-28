@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -108,11 +109,13 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[VcKick Error] {exception}");
+            Console.WriteLine($"[VcKick Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Action Failed",
-                "I could not disconnect this member. Check my permissions.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not disconnect this member. Check my permissions."));
         }
     }
 
@@ -157,7 +160,7 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
             {
                 failed++;
                 Console.WriteLine(
-                    $"[VcKickAll Error] {member.Id}: {exception.Message}");
+                    $"[VcKickAll Error] {member.Id}: {DiscordFailure.Summarize(exception)}");
             }
         }
 
@@ -230,11 +233,13 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[VcMove Error] {exception}");
+            Console.WriteLine($"[VcMove Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Action Failed",
-                "I could not move this member. Check my permissions.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not move this member. Check my permissions."));
         }
     }
 
@@ -308,11 +313,13 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[VcPull Error] {exception}");
+            Console.WriteLine($"[VcPull Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Action Failed",
-                "I could not pull this member. Check my permissions.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not pull this member. Check my permissions."));
         }
     }
 
@@ -452,11 +459,13 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Voice {title} Error] {exception}");
+            Console.WriteLine($"[Voice {title} Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Action Failed",
-                "I could not update this member. Check my permissions.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not update this member. Check my permissions."));
         }
     }
 
@@ -512,7 +521,7 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
             {
                 failed++;
                 Console.WriteLine(
-                    $"[Voice {title} Error] {member.Id}: {exception.Message}");
+                    $"[Voice {title} Error] {member.Id}: {DiscordFailure.Summarize(exception)}");
             }
         }
 
@@ -599,11 +608,13 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Voice {title} Error] {exception}");
+            Console.WriteLine($"[Voice {title} Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Action Failed",
-                "I could not update this channel. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not update this channel. Check my permissions and role position."));
         }
     }
 
@@ -709,23 +720,15 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
         return null;
     }
 
+    /// <summary>
+    /// Only an explicit reference counts — see <see cref="UserReference"/> for why a plain
+    /// name is refused rather than matched.
+    /// </summary>
     private SocketGuildUser? ResolveTarget(string query)
     {
-        if (MentionUtils.TryParseUser(query, out var userId) ||
-            ulong.TryParse(query, out userId))
-        {
-            return Context.Guild.GetUser(userId);
-        }
-
-        var guildUser = Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        guildUser ??= Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-        return guildUser;
+        return UserReference.TryParse(query, out var userId)
+            ? Context.Guild.GetUser(userId)
+            : null;
     }
 
     private SocketVoiceChannel? ResolveVoiceChannel(string query)
@@ -736,10 +739,22 @@ public sealed class VoiceModule : ModuleBase<SocketCommandContext>
             return Context.Guild.GetVoiceChannel(channelId);
         }
 
-        return Context.Guild.VoiceChannels.FirstOrDefault(channel =>
-                channel.Name.Equals(query, StringComparison.OrdinalIgnoreCase))
-            ?? Context.Guild.VoiceChannels.FirstOrDefault(channel =>
-                channel.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        var exact = Context.Guild.VoiceChannels.FirstOrDefault(channel =>
+            channel.Name.Equals(query, StringComparison.OrdinalIgnoreCase));
+
+        if (exact is not null)
+            return exact;
+
+        // A partial name is only trusted when exactly one channel can match it, so a move
+        // cannot drop members into whichever "vc" the channel list happened to yield first.
+        var partialMatches = Context.Guild.VoiceChannels
+            .Where(channel => channel.Name.Contains(
+                query,
+                StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
+
+        return partialMatches.Length == 1 ? partialMatches[0] : null;
     }
 
     private static (string User, string Remainder) SplitFirstWord(string input)

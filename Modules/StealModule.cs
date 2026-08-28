@@ -3,6 +3,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Services;
 
 namespace LastRide.Modules;
@@ -154,7 +155,7 @@ public sealed partial class StealModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Steal Emote Error] {emote.Name}: {exception.Message}");
+            Console.WriteLine($"[Steal Emote Error] {emote.Name}: {DiscordFailure.Summarize(exception)}");
             return null;
         }
     }
@@ -195,7 +196,7 @@ public sealed partial class StealModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Steal Sticker Error] {sticker.Name}: {exception}");
+            Console.WriteLine($"[Steal Sticker Error] {sticker.Name}: {DiscordFailure.Format(exception)}");
             return new StickerAddResult(null, exception.Message);
         }
     }

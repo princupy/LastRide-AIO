@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Services;
 
 namespace LastRide.Modules;
@@ -94,6 +95,15 @@ public sealed class TicketModule : ModuleBase<SocketCommandContext>
                 "Missing Permission",
                 "I need `Manage Channels` or `Administrator` to create the ticket " +
                 "category and log channel.");
+
+            return;
+        }
+
+        if (outcome.Result == TicketSetupResult.TwoFactorRequired)
+        {
+            await ReplyNoticeAsync(
+                "Two-Factor Required",
+                DiscordFailure.TwoFactorNotice());
 
             return;
         }
@@ -468,7 +478,7 @@ public sealed class TicketModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Ticket Panel Error] {exception.Message}");
+            Console.WriteLine($"[Ticket Panel Error] {DiscordFailure.Summarize(exception)}");
 
             await ReplyNoticeAsync(
                 "Post Failed",
@@ -587,6 +597,10 @@ public sealed class TicketModule : ModuleBase<SocketCommandContext>
                 "Ticket Already Open",
                 $"You can only have `{outcome.Limit}` ticket(s) open at once — " +
                 $"yours is <#{outcome.ChannelId}>."),
+
+            TicketOpenResult.TwoFactorRequired => ReplyNoticeAsync(
+                "Two-Factor Required",
+                DiscordFailure.TwoFactorNotice()),
 
             _ => ReplyNoticeAsync(
                 "Could Not Open",
@@ -819,7 +833,8 @@ public sealed class TicketModule : ModuleBase<SocketCommandContext>
         {
             await ReplyNoticeAsync(
                 "Member Not Found",
-                $"I could not find a member matching {Inline(trimmed)}.");
+                $"I could not find a member matching {Inline(trimmed)}. Mention them or " +
+                "use their user ID.");
 
             return;
         }
@@ -967,13 +982,25 @@ public sealed class TicketModule : ModuleBase<SocketCommandContext>
         var byName = Context.Guild.CategoryChannels.FirstOrDefault(candidate =>
             candidate.Name.Equals(query, StringComparison.OrdinalIgnoreCase));
 
-        byName ??= Context.Guild.CategoryChannels.FirstOrDefault(candidate =>
-            candidate.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        if (byName is not null)
+        {
+            category = byName;
+            return true;
+        }
 
-        if (byName is null)
+        // A partial name is only trusted when exactly one category can match it, so
+        // "support" cannot silently pick "Support Archive" over "Support Tickets".
+        var partialMatches = Context.Guild.CategoryChannels
+            .Where(candidate => candidate.Name.Contains(
+                query,
+                StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
+
+        if (partialMatches.Length != 1)
             return false;
 
-        category = byName;
+        category = partialMatches[0];
         return true;
     }
 
@@ -1026,33 +1053,31 @@ public sealed class TicketModule : ModuleBase<SocketCommandContext>
             return true;
         }
 
-        var partialRole = Context.Guild.Roles.FirstOrDefault(candidate =>
-            candidate.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        // A partial name is only trusted when exactly one role can match it — see
+        // AddRoleModule for the ordering problem this avoids.
+        var partialMatches = Context.Guild.Roles
+            .Where(candidate => candidate.Name.Contains(
+                query,
+                StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
 
-        if (partialRole is null)
+        if (partialMatches.Length != 1)
             return false;
 
-        role = partialRole;
+        role = partialMatches[0];
         return true;
     }
 
+    /// <summary>
+    /// Only an explicit reference counts — see <see cref="UserReference"/> for why a plain
+    /// name is refused rather than matched.
+    /// </summary>
     private SocketGuildUser? ResolveTarget(string query)
     {
-        if (MentionUtils.TryParseUser(query, out var mentionedUserId) ||
-            ulong.TryParse(query, out mentionedUserId))
-        {
-            return Context.Guild.GetUser(mentionedUserId);
-        }
-
-        var guildUser = Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        guildUser ??= Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-        return guildUser;
+        return UserReference.TryParse(query, out var userId)
+            ? Context.Guild.GetUser(userId)
+            : null;
     }
 
     private async Task<bool> EnsureGuildAsync()

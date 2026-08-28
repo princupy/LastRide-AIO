@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -85,7 +86,7 @@ public sealed class LockAllModule : ModuleBase<SocketCommandContext>
             {
                 failedCount++;
                 Console.WriteLine(
-                    $"[LockAll Error] #{channel.Name} ({channel.Id}): {exception.Message}");
+                    $"[LockAll Error] #{channel.Name} ({channel.Id}): {DiscordFailure.Summarize(exception)}");
             }
         }
 

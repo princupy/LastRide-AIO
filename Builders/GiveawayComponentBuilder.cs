@@ -22,7 +22,7 @@ public sealed class GiveawayComponentBuilder
     private const int MaxListedPrizeLength = 80;
     private const int MaxNameLength = 24;
 
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     /// <summary>
     /// The giveaway card itself, in both states. The countdown is Discord's native

@@ -9,7 +9,7 @@ public sealed class SetupRoleComponentBuilder
     private const int MaxListedStaffRoles = 20;
     private const int MaxListedCommands = 25;
 
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent BuildRoleToggled(
         bool added,

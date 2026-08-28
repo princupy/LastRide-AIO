@@ -389,13 +389,19 @@ public sealed class SetupRoleModule : ModuleBase<SocketCommandContext>
             return true;
         }
 
-        var partialRole = Context.Guild.Roles.FirstOrDefault(candidate =>
-            candidate.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+        // A partial name is only trusted when exactly one role can match it — see
+        // AddRoleModule for the ordering problem this avoids.
+        var partialMatches = Context.Guild.Roles
+            .Where(candidate => candidate.Name.Contains(
+                query,
+                StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
 
-        if (partialRole is null)
+        if (partialMatches.Length != 1)
             return false;
 
-        role = partialRole;
+        role = partialMatches[0];
         return true;
     }
 

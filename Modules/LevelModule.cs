@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Models;
 using LastRide.Services;
 
@@ -589,7 +590,7 @@ public sealed class LevelModule : ModuleBase<SocketCommandContext>
 
         if (member is null)
         {
-            await ReplyNoticeAsync("Member Not Found", "I could not find that member here.");
+            await ReplyNoticeAsync("Member Not Found", "Mention the member or use their user ID.");
             return;
         }
 
@@ -634,7 +635,7 @@ public sealed class LevelModule : ModuleBase<SocketCommandContext>
 
         if (member is null)
         {
-            await ReplyNoticeAsync("Member Not Found", "I could not find that member here.");
+            await ReplyNoticeAsync("Member Not Found", "Mention the member or use their user ID.");
             return;
         }
 
@@ -665,7 +666,7 @@ public sealed class LevelModule : ModuleBase<SocketCommandContext>
 
         if (member is null)
         {
-            await ReplyNoticeAsync("Member Not Found", "I could not find that member here.");
+            await ReplyNoticeAsync("Member Not Found", "Mention the member or use their user ID.");
             return;
         }
 
@@ -870,7 +871,7 @@ public sealed class LevelModule : ModuleBase<SocketCommandContext>
 
         if (resolved is null)
         {
-            failure = ("Member Not Found", "I could not find that member here.");
+            failure = ("Member Not Found", "Mention the member or use their user ID.");
             return false;
         }
 
@@ -886,28 +887,20 @@ public sealed class LevelModule : ModuleBase<SocketCommandContext>
         var member = ResolveTarget(query.Trim());
 
         if (member is null)
-            await ReplyNoticeAsync("Member Not Found", "I could not find that member here.");
+            await ReplyNoticeAsync("Member Not Found", "Mention the member or use their user ID.");
 
         return member;
     }
 
+    /// <summary>
+    /// Only an explicit reference counts — see <see cref="UserReference"/> for why a plain
+    /// name is refused rather than matched.
+    /// </summary>
     private SocketGuildUser? ResolveTarget(string query)
     {
-        if (MentionUtils.TryParseUser(query, out var userId) ||
-            ulong.TryParse(query, out userId))
-        {
-            return Context.Guild.GetUser(userId);
-        }
-
-        var guildUser = Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        guildUser ??= Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-        return guildUser;
+        return UserReference.TryParse(query, out var userId)
+            ? Context.Guild.GetUser(userId)
+            : null;
     }
 
     private bool TryResolveRole(string token, out SocketRole role)

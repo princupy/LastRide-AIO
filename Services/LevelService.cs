@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Discord;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Models;
 using MongoDB.Driver;
 
@@ -135,7 +136,7 @@ public sealed class LevelService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Leveling Text Error] {exception}");
+            Console.WriteLine($"[Leveling Text Error] {DiscordFailure.Format(exception)}");
         }
     }
 
@@ -188,7 +189,7 @@ public sealed class LevelService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Leveling Voice Error] {exception}");
+            Console.WriteLine($"[Leveling Voice Error] {DiscordFailure.Format(exception)}");
         }
     }
 
@@ -535,7 +536,7 @@ public sealed class LevelService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Leveling Role Add Error] {roleId}: {exception.Message}");
+            Console.WriteLine($"[Leveling Role Add Error] {roleId}: {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -559,7 +560,7 @@ public sealed class LevelService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Leveling Role Remove Error] {roleId}: {exception.Message}");
+            Console.WriteLine($"[Leveling Role Remove Error] {roleId}: {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -602,7 +603,7 @@ public sealed class LevelService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Leveling Announce Error] {exception.Message}");
+            Console.WriteLine($"[Leveling Announce Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 

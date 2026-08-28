@@ -4,7 +4,7 @@ namespace LastRide.Builders;
 
 public sealed class HideComponentBuilder
 {
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent BuildSuccess(
         ulong channelId,

@@ -11,6 +11,7 @@ public enum HelpCategory
     Welcome,
     Ticket,
     Media,
+    Music,
     Giveaway,
     Logs,
     Utility,
@@ -58,6 +59,7 @@ public static class HelpComponentIds
             "welcome" => HelpCategory.Welcome,
             "ticket" => HelpCategory.Ticket,
             "media" => HelpCategory.Media,
+            "music" => HelpCategory.Music,
             "giveaway" => HelpCategory.Giveaway,
             "logs" => HelpCategory.Logs,
             "utility" => HelpCategory.Utility,
@@ -65,7 +67,7 @@ public static class HelpComponentIds
             _ => HelpCategory.Utility
         };
 
-        return value is "home" or "automod" or "autorole" or "voice" or "leveling" or "setuproles" or "welcome" or "ticket" or "media" or "giveaway" or "logs" or "utility" or "moderation";
+        return value is "home" or "automod" or "autorole" or "voice" or "leveling" or "setuproles" or "welcome" or "ticket" or "media" or "music" or "giveaway" or "logs" or "utility" or "moderation";
     }
 
     public static string ToValue(HelpCategory category)
@@ -81,6 +83,7 @@ public static class HelpComponentIds
             HelpCategory.Welcome => "welcome",
             HelpCategory.Ticket => "ticket",
             HelpCategory.Media => "media",
+            HelpCategory.Music => "music",
             HelpCategory.Giveaway => "giveaway",
             HelpCategory.Logs => "logs",
             HelpCategory.Utility => "utility",

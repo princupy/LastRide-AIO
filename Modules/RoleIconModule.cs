@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Services;
 
 namespace LastRide.Modules;
@@ -127,11 +128,13 @@ public sealed class RoleIconModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[RoleIcon Error] {exception}");
+            Console.WriteLine($"[RoleIcon Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Role Icon Failed",
-                "I could not set the role icon. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not set the role icon. Check my permissions and role position."));
         }
     }
 
@@ -177,15 +180,19 @@ public sealed class RoleIconModule : ModuleBase<SocketCommandContext>
             return true;
         }
 
-        var partialRole = guild.Roles.FirstOrDefault(candidate =>
-            candidate.Name.Contains(
+        // A partial name is only trusted when exactly one role can match it — see
+        // AddRoleModule for the ordering problem this avoids.
+        var partialMatches = guild.Roles
+            .Where(candidate => candidate.Name.Contains(
                 query,
-                StringComparison.OrdinalIgnoreCase));
+                StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
 
-        if (partialRole is null)
+        if (partialMatches.Length != 1)
             return false;
 
-        role = partialRole;
+        role = partialMatches[0];
         return true;
     }
 

@@ -14,7 +14,7 @@ public sealed class TicketComponentBuilder
     private const int MaxListedTickets = 20;
     private const int MaxListedRoles = 20;
 
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     private const string EnabledEmoji = "<:Enabled:1541831759191212154>";
     private const string DisabledEmoji = "<:disabled:1541831823406014699>";

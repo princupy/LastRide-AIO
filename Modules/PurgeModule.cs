@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -121,11 +122,13 @@ public sealed class PurgeModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Purge Error] {exception}");
+            Console.WriteLine($"[Purge Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Purge Failed",
-                "I could not delete those messages. Check my permissions.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not delete those messages. Check my permissions."));
         }
     }
 

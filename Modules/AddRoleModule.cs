@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -117,11 +118,13 @@ public sealed class AddRoleModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AddRole Error] {exception}");
+            Console.WriteLine($"[AddRole Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Role Add Failed",
-                "I could not add that role. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not add that role. Check my permissions and role position."));
         }
     }
 
@@ -132,23 +135,15 @@ public sealed class AddRoleModule : ModuleBase<SocketCommandContext>
             components: _builder.BuildNotice(title, message));
     }
 
+    /// <summary>
+    /// Only an explicit reference counts — see <see cref="UserReference"/> for why a plain
+    /// name is refused rather than matched.
+    /// </summary>
     private SocketGuildUser? ResolveTarget(string query)
     {
-        if (MentionUtils.TryParseUser(query, out var mentionedUserId) ||
-            ulong.TryParse(query, out mentionedUserId))
-        {
-            return Context.Guild.GetUser(mentionedUserId);
-        }
-
-        var guildUser = Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        guildUser ??= Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-        return guildUser;
+        return UserReference.TryParse(query, out var userId)
+            ? Context.Guild.GetUser(userId)
+            : null;
     }
 
     private static bool TryResolveRole(
@@ -186,15 +181,20 @@ public sealed class AddRoleModule : ModuleBase<SocketCommandContext>
             return true;
         }
 
-        var partialRole = guild.Roles.FirstOrDefault(candidate =>
-            candidate.Name.Contains(
+        // A partial name is only trusted when exactly one role can match it. Taking the
+        // first of several used to hand out whichever role the list happened to yield —
+        // "mod" could land on "Moderator" or "Mod Applicant" depending on role order.
+        var partialMatches = guild.Roles
+            .Where(candidate => candidate.Name.Contains(
                 query,
-                StringComparison.OrdinalIgnoreCase));
+                StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
 
-        if (partialRole is null)
+        if (partialMatches.Length != 1)
             return false;
 
-        role = partialRole;
+        role = partialMatches[0];
         return true;
     }
 

@@ -21,7 +21,7 @@ public sealed class SnipeModule : ModuleBase<SocketCommandContext>
     }
 
     [Command("snipe")]
-    [Alias("s")]
+    [Alias("snipemsg")]
     [Summary("Shows the recently deleted messages in this channel.")]
     public async Task SnipeAsync()
     {

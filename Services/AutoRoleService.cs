@@ -1,5 +1,6 @@
 using Discord;
 using Discord.WebSocket;
+using LastRide.Core;
 
 namespace LastRide.Services;
 
@@ -43,7 +44,7 @@ public sealed class AutoRoleService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoRole Join Error] {exception}");
+            Console.WriteLine($"[AutoRole Join Error] {DiscordFailure.Format(exception)}");
         }
     }
 
@@ -89,7 +90,7 @@ public sealed class AutoRoleService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[VCRole Voice Error] {exception}");
+            Console.WriteLine($"[VCRole Voice Error] {DiscordFailure.Format(exception)}");
         }
     }
 
@@ -115,7 +116,7 @@ public sealed class AutoRoleService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoRole Add Error] {roleId}: {exception.Message}");
+            Console.WriteLine($"[AutoRole Add Error] {roleId}: {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -141,7 +142,7 @@ public sealed class AutoRoleService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[VCRole Remove Error] {roleId}: {exception.Message}");
+            Console.WriteLine($"[VCRole Remove Error] {roleId}: {DiscordFailure.Summarize(exception)}");
         }
     }
 

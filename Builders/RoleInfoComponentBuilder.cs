@@ -5,7 +5,7 @@ namespace LastRide.Builders;
 
 public sealed class RoleInfoComponentBuilder
 {
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent BuildMissingRole()
     {
@@ -88,7 +88,7 @@ public sealed class RoleInfoComponentBuilder
             $"> **Created:** {FormatTimestamp(role.CreatedAt)}\n" +
             $"> **Created Ago:** {FormatRelative(role.CreatedAt)}\n" +
             $"> **Position:** `{role.Position:N0}`\n" +
-            $"> **Color:** `{FormatRoleColors(role.Colors)}`\n" +
+            $"> **Color:** `{FormatColor(role.Color)}`\n" +
             $"> **Icon:** {FormatLink(role.GetIconUrl())}\n" +
             $"> **Emoji:** `{EscapeInlineCode(role.Emoji?.ToString() ?? "Not set")}`";
     }
@@ -233,22 +233,6 @@ public sealed class RoleInfoComponentBuilder
                             role.Guild.Id,
                             role.Id))
                     .WithDisabled(selectedPage == RoleInfoPage.Members));
-    }
-
-    private static string FormatRoleColors(RoleColors colors)
-    {
-        var values = new List<string>
-        {
-            $"Primary {FormatColor(colors.PrimaryColor)}"
-        };
-
-        if (colors.SecondaryColor.HasValue)
-            values.Add($"Secondary {FormatColor(colors.SecondaryColor.Value)}");
-
-        if (colors.TertiaryColor.HasValue)
-            values.Add($"Tertiary {FormatColor(colors.TertiaryColor.Value)}");
-
-        return string.Join(" | ", values);
     }
 
     private static string FormatColor(Color color)

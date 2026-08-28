@@ -24,7 +24,7 @@ public sealed class PingComponentBuilder
                 new TextDisplayBuilder(latencyContent));
 
         var container = new ContainerBuilder()
-            .WithAccentColor(new Color(8, 4, 4))
+            .WithAccentColor(ComponentTheme.AccentColor)
             .AddComponents(
                 section,
                 new SeparatorBuilder(

@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Discord;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Models;
 
 namespace LastRide.Services;
@@ -79,7 +80,7 @@ public sealed partial class MediaService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Media Scan Error] {exception}");
+            Console.WriteLine($"[Media Scan Error] {DiscordFailure.Format(exception)}");
             return false;
         }
     }
@@ -150,7 +151,7 @@ public sealed partial class MediaService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Media Forward Error] {exception.Message}");
+            Console.WriteLine($"[Media Forward Error] {DiscordFailure.Summarize(exception)}");
             return false;
         }
     }
@@ -173,7 +174,7 @@ public sealed partial class MediaService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Media Notice Error] {exception.Message}");
+            Console.WriteLine($"[Media Notice Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -185,7 +186,7 @@ public sealed partial class MediaService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Media Delete Error] {exception.Message}");
+            Console.WriteLine($"[Media Delete Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 

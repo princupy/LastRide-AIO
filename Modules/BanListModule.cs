@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Models;
 using LastRide.Services;
 
@@ -77,11 +78,13 @@ public sealed class BanListModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[BanList Error] {exception}");
+            Console.WriteLine($"[BanList Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Ban List Failed",
-                "I could not fetch the ban list. Check my permissions and try again.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not fetch the ban list. Check my permissions and try again."));
             return;
         }
 

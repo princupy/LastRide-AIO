@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -50,17 +51,26 @@ public sealed class UnmuteModule : ModuleBase<SocketCommandContext>
         {
             await ReplyNoticeAsync(
                 "Invalid Usage",
-                "Usage: `?unmute @user` or `?unmute user_id`.");
+                "Usage: `?unmute @user`. The member has to be mentioned.");
             return;
         }
 
-        var target = ResolveTarget(input.Trim());
+        if (!UserReference.TryParse(input.Trim(), out var targetId))
+        {
+            await ReplyNoticeAsync(
+                "Mention Required",
+                "Mention the member you want to unmute: `?unmute @user`. A user ID works " +
+                "too, but a plain name does not — I will not guess who you meant.");
+            return;
+        }
+
+        var target = Context.Guild.GetUser(targetId);
 
         if (target is null)
         {
             await ReplyNoticeAsync(
                 "User Not Found",
-                "I could not find that member. Mention them or provide a valid user ID.");
+                "That user is not a member of this server.");
             return;
         }
 
@@ -91,11 +101,13 @@ public sealed class UnmuteModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Unmute Error] {exception}");
+            Console.WriteLine($"[Unmute Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Unmute Failed",
-                "I could not unmute this member. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not unmute this member. Check my permissions and role position."));
         }
     }
 
@@ -104,25 +116,6 @@ public sealed class UnmuteModule : ModuleBase<SocketCommandContext>
         await ReplyAsync(
             allowedMentions: AllowedMentions.None,
             components: _builder.BuildNotice(title, message));
-    }
-
-    private SocketGuildUser? ResolveTarget(string query)
-    {
-        if (MentionUtils.TryParseUser(query, out var mentionedUserId) ||
-            ulong.TryParse(query, out mentionedUserId))
-        {
-            return Context.Guild.GetUser(mentionedUserId);
-        }
-
-        var guildUser = Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        guildUser ??= Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-        return guildUser;
     }
 
     private static bool HasModeratePermission(GuildPermissions permissions)

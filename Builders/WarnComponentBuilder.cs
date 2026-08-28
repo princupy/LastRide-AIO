@@ -4,7 +4,7 @@ namespace LastRide.Builders;
 
 public sealed class WarnComponentBuilder
 {
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent BuildWarned(
         ulong targetId,

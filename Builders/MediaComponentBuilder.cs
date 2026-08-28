@@ -17,7 +17,7 @@ public sealed class MediaComponentBuilder
     // Keeps a forwarded message readable inside the card instead of dominating it.
     private const int MaxForwardedContent = 500;
 
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     private const string EnabledEmoji = "<:Enabled:1541831759191212154>";
     private const string DisabledEmoji = "<:disabled:1541831823406014699>";

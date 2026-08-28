@@ -2,6 +2,7 @@ using Discord;
 using Discord.Rest;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Models;
 
 namespace LastRide.Services;
@@ -544,7 +545,7 @@ public sealed class LogService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Logs Send Error] {exception.Message}");
+            Console.WriteLine($"[Logs Send Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -593,7 +594,7 @@ public sealed class LogService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Logs Audit Error] {exception.Message}");
+            Console.WriteLine($"[Logs Audit Error] {DiscordFailure.Summarize(exception)}");
             return (null, null);
         }
     }
@@ -632,7 +633,7 @@ public sealed class LogService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Logs Audit Error] {exception.Message}");
+            Console.WriteLine($"[Logs Audit Error] {DiscordFailure.Summarize(exception)}");
             return null;
         }
     }

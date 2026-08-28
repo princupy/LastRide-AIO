@@ -13,7 +13,7 @@ public sealed class LevelComponentBuilder
     /// <summary>Leaderboard rows shown per page.</summary>
     public const int PageSize = 10;
 
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     private const string EnabledEmoji = "<:Enabled:1541831759191212154>";
     private const string DisabledEmoji = "<:disabled:1541831823406014699>";

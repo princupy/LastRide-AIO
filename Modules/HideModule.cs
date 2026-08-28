@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -92,11 +93,13 @@ public sealed class HideModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Hide Error] {exception}");
+            Console.WriteLine($"[Hide Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Hide Failed",
-                "I could not hide this channel. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not hide this channel. Check my permissions and role position."));
         }
     }
 

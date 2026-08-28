@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Services;
 
 namespace LastRide.Modules;
@@ -60,17 +61,27 @@ public sealed class MuteModule : ModuleBase<SocketCommandContext>
         {
             await ReplyNoticeAsync(
                 "Invalid Usage",
-                "Usage: `?mute @user 10m reason` or `?mute user_id 1h reason`.");
+                "Usage: `?mute @user 10m reason`. The member has to be mentioned.");
             return;
         }
 
-        var target = ResolveTarget(parsed.Value.Target);
+        if (!UserReference.TryParse(parsed.Value.Target, out var targetId))
+        {
+            await ReplyNoticeAsync(
+                "Mention Required",
+                "Mention the member you want to mute: `?mute @user 10m reason`. " +
+                "A user ID works too, but a plain name does not — I will not guess who " +
+                "you meant.");
+            return;
+        }
+
+        var target = Context.Guild.GetUser(targetId);
 
         if (target is null)
         {
             await ReplyNoticeAsync(
                 "User Not Found",
-                "I could not find that member. Mention them or provide a valid user ID.");
+                "That user is not a member of this server.");
             return;
         }
 
@@ -127,11 +138,13 @@ public sealed class MuteModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Mute Error] {exception}");
+            Console.WriteLine($"[Mute Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Mute Failed",
-                "I could not mute this member. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not mute this member. Check my permissions and role position."));
         }
     }
 
@@ -140,25 +153,6 @@ public sealed class MuteModule : ModuleBase<SocketCommandContext>
         await ReplyAsync(
             allowedMentions: AllowedMentions.None,
             components: _builder.BuildNotice(title, message));
-    }
-
-    private SocketGuildUser? ResolveTarget(string query)
-    {
-        if (MentionUtils.TryParseUser(query, out var mentionedUserId) ||
-            ulong.TryParse(query, out mentionedUserId))
-        {
-            return Context.Guild.GetUser(mentionedUserId);
-        }
-
-        var guildUser = Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        guildUser ??= Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-        return guildUser;
     }
 
     private static string? ValidateHierarchy(

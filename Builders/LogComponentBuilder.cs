@@ -9,7 +9,7 @@ public sealed class LogComponentBuilder
     private const string DisabledEmoji = "<:disabled:1541831823406014699>";
     private const int MaxContentPreview = 500;
 
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     // ---- Config cards (command replies) ----
 

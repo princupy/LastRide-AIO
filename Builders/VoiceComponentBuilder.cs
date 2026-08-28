@@ -7,7 +7,7 @@ public sealed class VoiceComponentBuilder
 {
     private const int MaxChannelOptions = 25;
     private const int MaxListedMembers = 40;
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     // Single-target result card (mute, deafen, disconnect, move, pull).
     public MessageComponent BuildActionResult(

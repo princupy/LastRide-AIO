@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Configuration;
 using LastRide.Models;
 using LastRide.Services;
@@ -289,7 +290,8 @@ public sealed class GiveawayModule : ModuleBase<SocketCommandContext>
             {
                 await DmNoticeAsync(
                     "Member Not Found",
-                    $"Could not find {Inline(parts[0])} in that server.");
+                    $"Could not find {Inline(parts[0])} in that server. Mention the " +
+                    "member or use their user ID.");
 
                 return;
             }
@@ -496,23 +498,15 @@ public sealed class GiveawayModule : ModuleBase<SocketCommandContext>
         return $"{duration.TotalSeconds:0.##}s";
     }
 
+    /// <summary>
+    /// Only an explicit reference counts — see <see cref="UserReference"/> for why a plain
+    /// name is refused rather than matched.
+    /// </summary>
     private SocketGuildUser? ResolveTarget(string query)
     {
-        if (MentionUtils.TryParseUser(query, out var mentionedUserId) ||
-            ulong.TryParse(query, out mentionedUserId))
-        {
-            return Context.Guild.GetUser(mentionedUserId);
-        }
-
-        var guildUser = Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        guildUser ??= Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-        return guildUser;
+        return UserReference.TryParse(query, out var userId)
+            ? Context.Guild.GetUser(userId)
+            : null;
     }
 
     private async Task DeleteInvocationAsync()
@@ -523,7 +517,7 @@ public sealed class GiveawayModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Giveaway Cleanup Error] {exception.Message}");
+            Console.WriteLine($"[Giveaway Cleanup Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 
@@ -545,7 +539,7 @@ public sealed class GiveawayModule : ModuleBase<SocketCommandContext>
         catch (Exception exception)
         {
             // DMs closed only costs the confirmation; the rig itself is already saved.
-            Console.WriteLine($"[Giveaway DM Error] {exception.Message}");
+            Console.WriteLine($"[Giveaway DM Error] {DiscordFailure.Summarize(exception)}");
         }
     }
 

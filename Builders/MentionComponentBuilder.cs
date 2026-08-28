@@ -5,13 +5,14 @@ namespace LastRide.Builders;
 public sealed class MentionComponentBuilder
 {
     private const string ArrowEmoji = "<:ArrowRight:1541407020257640470>";
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent Build(
         string botName,
         string botAvatarUrl,
         string prefix,
-        int commandCount)
+        int commandCount,
+        int availableCommands)
     {
         var description =
             $"Hey there — I'm **{EscapeInlineCode(botName)}**, your all-in-one server companion.\n" +
@@ -20,6 +21,7 @@ public sealed class MentionComponentBuilder
         var summary =
             $"> {ArrowEmoji} **Server Prefix:** `{prefix}`\n" +
             $"> {ArrowEmoji} **Commands Loaded:** `{commandCount:N0}`\n" +
+            $"> {ArrowEmoji} **Available to You:** `{availableCommands:N0}`\n" +
             $"> {ArrowEmoji} **Get Started:** `{prefix}help`";
 
         var section = new SectionBuilder()

@@ -3,6 +3,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -67,7 +68,11 @@ public sealed partial class DeleteEmojiModule : ModuleBase<SocketCommandContext>
         var deletedEmojis = new List<string>();
         var deletedStickers = new List<string>();
         var failedCount = 0;
-        string? failureReason = null;
+
+        // The rejection itself is kept rather than its text: the reply has to be able to
+        // tell a 2FA-gated server apart from an ordinary failure, and only the exception
+        // carries the code that says which one it was.
+        Exception? failure = null;
 
         foreach (var emote in emotes.Take(MaxItemsPerRun))
         {
@@ -84,9 +89,9 @@ public sealed partial class DeleteEmojiModule : ModuleBase<SocketCommandContext>
             }
             catch (Exception exception)
             {
-                Console.WriteLine($"[DeleteEmoji Error] {emote.Name}: {exception}");
+                Console.WriteLine($"[DeleteEmoji Error] {emote.Name}: {DiscordFailure.Format(exception)}");
                 failedCount++;
-                failureReason ??= exception.Message;
+                failure ??= exception;
             }
         }
 
@@ -107,9 +112,9 @@ public sealed partial class DeleteEmojiModule : ModuleBase<SocketCommandContext>
             }
             catch (Exception exception)
             {
-                Console.WriteLine($"[DeleteSticker Error] {sticker.Name}: {exception}");
+                Console.WriteLine($"[DeleteSticker Error] {sticker.Name}: {DiscordFailure.Format(exception)}");
                 failedCount++;
-                failureReason ??= exception.Message;
+                failure ??= exception;
             }
         }
 
@@ -117,9 +122,11 @@ public sealed partial class DeleteEmojiModule : ModuleBase<SocketCommandContext>
         {
             await ReplyNoticeAsync(
                 "Delete Failed",
-                failureReason is null
+                failure is null
                     ? "I could not delete any of those."
-                    : $"I could not delete that. Reason: `{failureReason}`");
+                    : DiscordFailure.Describe(
+                        failure,
+                        $"I could not delete that. Reason: `{failure.Message}`"));
             return;
         }
 

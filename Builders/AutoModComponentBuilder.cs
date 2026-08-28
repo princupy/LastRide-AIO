@@ -10,7 +10,7 @@ public sealed class AutoModComponentBuilder
     private const int MaxContentPreview = 200;
     private const int MaxBadWordsPreview = 1500;
 
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent BuildOverview(
         AutoModConfig config,

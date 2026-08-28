@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -85,7 +86,7 @@ public sealed class HideAllModule : ModuleBase<SocketCommandContext>
             {
                 failedCount++;
                 Console.WriteLine(
-                    $"[HideAll Error] #{channel.Name} ({channel.Id}): {exception.Message}");
+                    $"[HideAll Error] #{channel.Name} ({channel.Id}): {DiscordFailure.Summarize(exception)}");
             }
         }
 

@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Configuration;
+using LastRide.Services;
 
 namespace LastRide.Core;
 
@@ -13,6 +14,7 @@ public sealed class BotRunner
     private readonly DiscordSocketClient _client;
     private readonly CommandService _commands;
     private readonly CommandHandler _commandHandler;
+    private readonly MusicService _musicService;
     private readonly BotOptions _options;
     private CancellationTokenSource? _activityRotation;
     private Task? _activityRotationTask;
@@ -21,11 +23,13 @@ public sealed class BotRunner
         DiscordSocketClient client,
         CommandService commands,
         CommandHandler commandHandler,
+        MusicService musicService,
         BotOptions options)
     {
         _client = client;
         _commands = commands;
         _commandHandler = commandHandler;
+        _musicService = musicService;
         _options = options;
     }
 
@@ -37,6 +41,13 @@ public sealed class BotRunner
 
         Console.WriteLine("[Startup] Loading commands...");
         await _commandHandler.InitializeAsync();
+
+        // Lavalink4NET registers its audio service and inactivity tracker as hosted
+        // services, and this bot has no generic host to run them — so the start and
+        // stop calls happen here instead. Without this, music silently never connects.
+        // The socket itself dials once Discord goes ready and then keeps itself alive.
+        Console.WriteLine("[Startup] Starting audio service...");
+        await _musicService.InitializeAsync();
 
         Console.WriteLine("[Startup] Logging in...");
         await _client.LoginAsync(TokenType.Bot, _options.Token);
@@ -66,6 +77,7 @@ public sealed class BotRunner
             Console.CancelKeyPress -= cancelHandler;
 
             await StopActivityRotationAsync();
+            await _musicService.StopAsync();
             await _client.StopAsync();
             await _client.LogoutAsync();
         }

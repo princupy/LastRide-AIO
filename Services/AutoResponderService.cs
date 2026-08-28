@@ -1,5 +1,6 @@
 using Discord;
 using Discord.WebSocket;
+using LastRide.Core;
 
 namespace LastRide.Services;
 
@@ -59,7 +60,7 @@ public sealed class AutoResponderService
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[AutoResponder Error] {exception}");
+            Console.WriteLine($"[AutoResponder Error] {DiscordFailure.Format(exception)}");
         }
     }
 

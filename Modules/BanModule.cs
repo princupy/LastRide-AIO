@@ -3,6 +3,7 @@ using Discord.Commands;
 using Discord.Rest;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 using LastRide.Services;
 
 namespace LastRide.Modules;
@@ -106,24 +107,18 @@ public sealed class BanModule : ModuleBase<SocketCommandContext>
             components: _builder.BuildNotice(title, message));
     }
 
+    /// <summary>
+    /// Only an explicit reference counts — see <see cref="UserReference"/> for why a plain
+    /// name is refused rather than matched. The REST lookup stays so a member who already
+    /// left, or was never cached, can still be banned by ID.
+    /// </summary>
     private async Task<IUser?> ResolveTargetAsync(string query)
     {
-        if (MentionUtils.TryParseUser(query, out var mentionedUserId) ||
-            ulong.TryParse(query, out mentionedUserId))
-        {
-            return Context.Guild.GetUser(mentionedUserId) as IUser ??
-                await Context.Client.Rest.GetUserAsync(mentionedUserId);
-        }
+        if (!UserReference.TryParse(query, out var userId))
+            return null;
 
-        var guildUser = Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Equals(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Equals(query, StringComparison.OrdinalIgnoreCase));
-
-        guildUser ??= Context.Guild.Users.FirstOrDefault(user =>
-            user.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            user.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-        return guildUser;
+        return Context.Guild.GetUser(userId) as IUser ??
+            await Context.Client.Rest.GetUserAsync(userId);
     }
 
     private static string? ValidateHierarchy(

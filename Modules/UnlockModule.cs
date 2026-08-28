@@ -2,6 +2,7 @@ using Discord;
 using Discord.Commands;
 using Discord.WebSocket;
 using LastRide.Builders;
+using LastRide.Core;
 
 namespace LastRide.Modules;
 
@@ -92,11 +93,13 @@ public sealed class UnlockModule : ModuleBase<SocketCommandContext>
         }
         catch (Exception exception)
         {
-            Console.WriteLine($"[Unlock Error] {exception}");
+            Console.WriteLine($"[Unlock Error] {DiscordFailure.Format(exception)}");
 
             await ReplyNoticeAsync(
                 "Unlock Failed",
-                "I could not unlock this channel. Check my permissions and role position.");
+                DiscordFailure.Describe(
+                    exception,
+                    "I could not unlock this channel. Check my permissions and role position."));
         }
     }
 

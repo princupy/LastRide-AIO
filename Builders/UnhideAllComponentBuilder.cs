@@ -6,7 +6,7 @@ namespace LastRide.Builders;
 public sealed class UnhideAllComponentBuilder
 {
     private const int MaxChannelOptions = 24;
-    private static readonly Color AccentColor = new(8, 4, 4);
+    private static readonly Color AccentColor = ComponentTheme.AccentColor;
 
     public MessageComponent BuildMenu(
         SocketGuild guild,
