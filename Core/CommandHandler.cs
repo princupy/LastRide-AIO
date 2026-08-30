@@ -2881,9 +2881,12 @@ public sealed class CommandHandler
                     var overwrite =
                         currentOverwrite ?? OverwritePermissions.InheritAll;
 
+                    // Kept in step with the unlock command: an outright allow, not a
+                    // clear back to inherit, so the channel is usable afterwards even
+                    // where @everyone cannot post at the server or category level.
                     await channel.AddPermissionOverwriteAsync(
                         everyoneRole,
-                        overwrite.Modify(sendMessages: PermValue.Inherit),
+                        overwrite.Modify(sendMessages: PermValue.Allow),
                         new RequestOptions
                         {
                             AuditLogReason =

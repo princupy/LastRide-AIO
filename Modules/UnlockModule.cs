@@ -76,9 +76,13 @@ public sealed class UnlockModule : ModuleBase<SocketCommandContext>
         {
             var overwrite = currentOverwrite ?? OverwritePermissions.InheritAll;
 
+            // Send Messages is granted outright rather than cleared back to inherit.
+            // Inherit only reads as "unlocked" when @everyone can already post at the
+            // server or category level; where it cannot, clearing the deny leaves the
+            // channel just as silent as it was and the unlock looks like it did nothing.
             await channel.AddPermissionOverwriteAsync(
                 everyoneRole,
-                overwrite.Modify(sendMessages: PermValue.Inherit),
+                overwrite.Modify(sendMessages: PermValue.Allow),
                 new RequestOptions
                 {
                     AuditLogReason =
